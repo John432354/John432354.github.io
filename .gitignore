@@ -1,0 +1,7 @@
+# Local-only Lichess credentials. Do not commit/share.
+local-secrets.json
+.env.local
+
+# Runtime/log clutter
+*.log
+.DS_Store

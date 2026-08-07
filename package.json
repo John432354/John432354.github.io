@@ -1,0 +1,11 @@
+{
+  "name": "lineforge-opening-trainer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "serve": "node server.js"
+  },
+  "description": "LineForge: a browser opening-lines trainer with Lichess/Masters explorer rules, enemy database replies, and PGN export."
+}
