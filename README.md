@@ -11,6 +11,7 @@ Features:
 - Side assignment controls your training side, PGN headers, and default orientation
 - Startup onboarding guide explaining board control, PGN export, APIs, and move fetching
 - Optional Forgey AI mentor that explains why your corrected line move was better than your rejected attempts
+- Skip current move button that plays the top eligible line move, adds one mistake, and asks Forgey to explain it
 - PGN copy/download export and FEN copy
 - Move list, captured pieces, board flip, themes, and responsive layout
 - Lichess Opening Explorer integration for most-played human moves in the current position

@@ -200,6 +200,7 @@ function wireEvents() {
   $('download-pgn-modal-btn').addEventListener('click', downloadPgn);
   $('copy-pgn-btn').addEventListener('click', () => copyText(getPgn(), 'PGN copied'));
   $('copy-fen-btn').addEventListener('click', () => copyText(state.game.fen(), 'FEN copied'));
+  $('skip-move-btn').addEventListener('click', () => skipCurrentPlayerMove());
   $('completion-close-btn').addEventListener('click', () => $('completion-dialog').close());
   $('completion-copy-pgn-btn').addEventListener('click', () => copyText(getPgn(), 'PGN copied'));
   $('completion-download-pgn-btn').addEventListener('click', downloadPgn);
@@ -740,6 +741,7 @@ function renderStatus() {
   $('resign-btn').disabled = result !== '*';
   $('draw-btn').disabled = result !== '*';
   $('undo-btn').disabled = state.game.history().length === 0;
+  $('skip-move-btn').disabled = result !== '*' || state.enemyThinking || state.game.turn() !== state.playerColor;
 }
 
 function renderPlayers() {
@@ -975,6 +977,98 @@ function renderOpeningFromResults(results) {
   } else {
     $('opening-name').textContent = 'Uncatalogued position';
   }
+}
+
+
+async function skipCurrentPlayerMove() {
+  if (isGameFinished()) {
+    toast('This line is already complete. Start a new game to continue.');
+    return;
+  }
+  if (state.enemyThinking || state.game.turn() !== state.playerColor) {
+    toast('Skip is only available on your turn.');
+    return;
+  }
+
+  const fen = state.game.fen();
+  try {
+    setExplorerPill('Skip: finding top line move', 'soft');
+    renderExplorerMessage('Finding the top eligible database move to play for you...', true);
+    const results = await getExplorerResultsForFen(fen);
+    if (fen !== state.game.fen() || state.game.turn() !== state.playerColor) return;
+
+    state.lastExplorerFen = fen;
+    state.lastExplorerData = Object.fromEntries(results.map((result) => [result.source, result.data]));
+    renderOpeningFromResults(results);
+
+    const plan = choosePlayerCandidatePlan(
+      buildCombinedMoveList(results, state.playerColor),
+      currentDepth(),
+      state.playerColor,
+      state.movePolicy,
+    );
+
+    if (!plan.candidates.length) {
+      completeOpeningAtDepth(currentDepth(), 'no-player-candidates');
+      return;
+    }
+
+    const entry = plan.candidates[0];
+    const move = entry.legalMove;
+    const made = state.game.move({ from: move.from, to: move.to, promotion: move.promotion });
+    if (!made) {
+      toast('Could not play the skipped move. Refresh the explorer and try again.');
+      scheduleExplorerFetch(100);
+      return;
+    }
+
+    state.mistakes += 1;
+    toast(`Skipped move. Forgey played ${made.san} and added one mistake.`);
+    afterMove(made, { skipValidation: true });
+    queueCoachForSkippedMove(fen, made, state.lastExplorerData);
+  } catch (error) {
+    renderExplorerError(error);
+    toast(`Skip failed: ${error.message || error}`);
+  }
+}
+
+async function getExplorerResultsForFen(fen) {
+  if (state.lastExplorerFen === fen && state.lastExplorerData?.masters && state.lastExplorerData?.lichess) {
+    return FIXED_EXPLORER_SOURCES.map((source) => ({ ...source, data: state.lastExplorerData[source.source] }));
+  }
+  const results = [];
+  for (const fixedSource of FIXED_EXPLORER_SOURCES) {
+    const data = await requestExplorerData(fen, { fixedSource: fixedSource.source });
+    results.push({ ...fixedSource, data });
+  }
+  return results;
+}
+
+function queueCoachForSkippedMove(fen, move, validationData) {
+  const accepted = {
+    uci: toUci(move),
+    san: move.san || toUci(move),
+    fen,
+    color: state.playerColor,
+    stats: summarizeMoveForCoach(toUci(move), state.playerColor, validationData),
+  };
+  const mistakes = [{
+    uci: 'skip',
+    san: 'skipped the move',
+    fen,
+    color: state.playerColor,
+    skipped: true,
+  }];
+  const localAdvice = generateLocalCoachAdvice({ fen, accepted, mistakes }); // kept for future/local-mode work, not currently shown
+  state.lastCoachLocalAdvice = localAdvice;
+  state.lastCoachAiAdvice = '';
+  const key = $('openrouter-key')?.value.trim() || readSession(OPENROUTER_KEY);
+  if (!state.aiCoachEnabled || !key) {
+    showCoachMessage('Forgey needs OpenRouter', `I played ${accepted.san} for you. Add an OpenRouter key if you want Forgey to explain skipped moves.`);
+    return;
+  }
+  showCoachMessage('Forgey is thinking', `I played ${accepted.san}. Asking Gemma to explain the move...`);
+  startCoachAiRetries({ fen, accepted, mistakes, validationData, key, localAdvice });
 }
 
 function renderPlayerMoveChooser(results, fen) {
@@ -1427,7 +1521,7 @@ function queueCoachForAcceptedMove(fen, move, validationData) {
     stats: summarizeMoveForCoach(toUci(move), state.playerColor, validationData),
   };
   const localAdvice = generateLocalCoachAdvice({ fen, accepted, mistakes }); // kept for future/local-mode work, not currently shown
-  state.lastCoachLocalAdvice = '';
+  state.lastCoachLocalAdvice = localAdvice;
   state.lastCoachAiAdvice = '';
 
   const key = $('openrouter-key')?.value.trim() || readSession(OPENROUTER_KEY);
@@ -1509,6 +1603,9 @@ function describeAcceptedMove(fen, accepted) {
 }
 
 function describeMistakeGroup(fen, mistakes) {
+  if (mistakes.some((m) => m.skipped || m.uci === 'skip')) {
+    return 'Skipping means you were unsure of the plan, so focus on what the chosen move improves right away.';
+  }
   const moves = mistakes.map((m) => m.uci || '').filter(Boolean);
   const pieces = moves.map((uci) => {
     try { return new Chess(fen).get(uci.slice(0, 2))?.type || ''; } catch { return ''; }
