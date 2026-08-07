@@ -16,7 +16,7 @@ Features:
 - Move list, captured pieces, board flip, themes, and responsive layout
 - Lichess Opening Explorer integration for most-played human moves in the current position
 - Hardcoded explorer sources: Masters database plus Lichess 2500+ rapid/classical/correspondence games
-- Player move rules: minimum qualification-games threshold plus your color score ≥50%
+- Player move rules: Masters games plus Lichess games must clear the depth threshold, and the higher source score for your color must be at least 50%
 - Depth slider values exactly: 100k, 50k, 10k, 5k, 1k, 500
 - Enemy reply rule: most popular uncompleted database response from the fixed Masters/Lichess sources, game count and score ignored
 - Opening completion when your side has no qualifying database move or the enemy has no uncompleted database response
@@ -36,22 +36,22 @@ After each legal move, the app reads the current FEN and makes two fixed opening
    - `speeds=rapid,classical,correspondence`
    - fixed move/reference-game limits
 
-Your move list is built from both databases and keeps Master and Lichess color scores separate. Qualification uses a merged-games rule:
+Your move list is built from both databases and keeps Master and Lichess color scores separate. Qualification now uses a simple combined-depth, best-score rule:
 
-- if Masters and Lichess both score ≥50% for your color, their game counts combine for the depth test;
-- if only one database scores ≥50%, the higher of the two game counts is used, even if the positive score is in the other database;
-- if neither database scores ≥50%, the move does not qualify.
+- depth is always Masters games plus Lichess 2500+ games for that move;
+- score is whichever source gives your color the higher score;
+- the move qualifies when combined games clear the selected depth and the best score is at least 50%.
 
-The default ordering is Masters first: train positive-score Masters lane moves first, and show Lichess-lane moves only if no Masters-lane move qualifies. A combined mode is also available.
+The default ordering sorts by the best score from either source. You can also sort by most combined games.
 
-If your attempted move fails the 500+ qualification-games / ≥50% score rule, the app shows “Hmm, try making a better move!”, adds a mistake, and automatically undoes it. If your side has no qualifying database move, the app considers the opening learned. Enemy moves choose the most popular uncompleted database response from the fixed Masters/Lichess sources, ignoring game count and score. If no such enemy database response exists, the app congratulates you, and zero-mistake lines are saved so the enemy will skip them at that depth.
+If your attempted move fails the 500+ combined-games / best score at least 50% rule, the app shows “Hmm, try making a better move!”, adds a mistake, and automatically undoes it. If your side has no qualifying database move, the app considers the opening learned. Enemy moves choose the most popular uncompleted database response from the fixed Masters/Lichess sources, ignoring game count and score. If no such enemy database response exists, the app congratulates you, and zero-mistake lines are saved so the enemy will skip them at that depth.
 
 
 ## Optional Forgey AI mentor
 
 LineForge can explain a corrected move after you make mistakes in the same position. Flow:
 
-1. You try one or more moves that fail the 500+ qualification-games / ≥50% score rule.
+1. You try one or more moves that fail the 500+ combined-games / best score at least 50% rule.
 2. LineForge rejects and undoes those attempts, tracking their SAN/UCI and database stats.
 3. You then make an accepted move from that same position.
 4. If an OpenRouter key is configured, Forgey keeps trying Gemma in the background until it gets a usable explanation. A local-advice framework remains in the codebase for future use, but it is not exposed in the current UI.

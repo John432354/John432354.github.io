@@ -168,11 +168,11 @@
           <label class="field">
             <span>Player move ordering</span>
             <select id="move-policy">
-              <option value="masterFirst">Masters first, then Lichess only if no Masters qualifier</option>
-              <option value="combined">Combined Masters + Lichess, sorted by best color score</option>
+              <option value="bestScore">Best score first</option>
+              <option value="mostGames">Most combined games first</option>
             </select>
           </label>
-          <p class="help-text">Your moves need ≥50% color score in Masters or Lichess. If both databases are positive, their games combine for the depth test; if only one is positive, LineForge uses the larger game count from either database. Enemy replies use the most popular uncompleted response regardless of game count or score.</p>
+          <p class="help-text">Your moves use combined games from Masters plus Lichess 2500+ for the depth test. The score used is the higher score between Masters and Lichess. Enemy replies use the most popular uncompleted response regardless of game count or score.</p>
         </section>
 
         <details class="settings-details" open>
@@ -224,7 +224,7 @@
           <summary>How API move fetching works</summary>
           <div class="api-notes">
             <p>After each legal move, the app reads the current FEN and makes two fixed opening-data requests: Masters database, plus Lichess 2500+ rapid/classical/correspondence.</p>
-            <p>On your turn, a database move is usable when its qualification games clear the selected depth and your color score is ≥50% in Masters or Lichess. If both sources are ≥50%, games combine; if only one is ≥50%, the larger source game count is used. Master and Lichess scores stay separate on every row.</p>
+            <p>On your turn, a database move is usable when Masters games plus Lichess games clear the selected depth, and the higher of the two source scores is at least 50%. Master and Lichess scores stay separate on every row, but qualification always uses combined games and the best score.</p>
             <p>If your move fails the 500+ game / 50%+ score rule, it is rejected, counted as a mistake, and automatically undone. If no database move qualifies for your color, the opening is considered learned. On the enemy turn, the app plays the most popular uncompleted API database response, ignoring game count and score.</p>
           </div>
         </details>
@@ -273,11 +273,11 @@
         </section>
         <section class="onboarding-tile">
           <h3>5. Depth and score rule</h3>
-          <p>Your database moves must clear the selected qualification-games threshold with your color score ≥50% in Masters or Lichess. If both databases are positive, game counts combine; if only one is positive, the higher game count is used. The depth slider values are exactly <code>100k, 50k, 10k, 5k, 1k, 500</code>.</p>
+          <p>Your database moves must clear the selected depth using Masters games plus Lichess games. The score check uses whichever source gives your color the higher score, and that best score must be at least 50%. The depth slider values are exactly <code>100k, 50k, 10k, 5k, 1k, 500</code>.</p>
         </section>
         <section class="onboarding-tile">
           <h3>6. Move ordering</h3>
-          <p>The default mode sorts qualifying Masters moves first by your color score. Lichess-only moves appear only if Masters has no qualifier. You can switch to a combined list that keeps Masters and Lichess scores separate.</p>
+          <p>The default mode sorts by the best score from either source. You can also sort by the most combined games. Masters and Lichess scores stay visible separately.</p>
         </section>
         <section class="onboarding-tile">
           <h3>7. Completion</h3>

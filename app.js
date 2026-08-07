@@ -75,7 +75,7 @@ const state = {
   trainingComplete: false,
   mistakes: 0,
   depthTierIndex: DEFAULT_DEPTH_INDEX,
-  movePolicy: 'masterFirst',
+  movePolicy: 'bestScore',
   colorProgress: null,
   aiCoachEnabled: true,
   openRouterModel: DEFAULT_OPENROUTER_MODEL,
@@ -236,7 +236,7 @@ function wireEvents() {
     scheduleExplorerFetch(120);
   });
   $('move-policy').addEventListener('change', () => {
-    state.movePolicy = $('move-policy').value;
+    state.movePolicy = normalizeMovePolicy($('move-policy').value);
     saveExplorerPreferences();
     scheduleExplorerFetch(120);
   });
@@ -729,12 +729,12 @@ function renderBoard() {
 
 function renderStatus() {
   const turn = state.game.turn();
-  const turnText = `${colorName(turn)} to move${state.game.isCheck() ? ' • check' : ''}${state.enemyThinking ? ' • enemy selecting database reply…' : ''}`;
+  const turnText = `${colorName(turn)} to move${state.game.isCheck() ? ' - check' : ''}${state.enemyThinking ? ' - enemy selecting database reply…' : ''}`;
   $('turn-status').textContent = turnText;
 
   const status = getGameStatusText();
   $('game-status').textContent = status;
-  $('playing-as-pill').textContent = `You: ${colorName(state.playerColor)} • ≥${formatDepth(currentDepth())}`;
+  $('playing-as-pill').textContent = `You: ${colorName(state.playerColor)} - >=${formatDepth(currentDepth())}`;
   if ($('mistake-total')) $('mistake-total').textContent = String(state.mistakes);
 
   const result = currentResult();
@@ -794,17 +794,17 @@ function renderMoveList() {
 }
 
 function getGameStatusText() {
-  if (state.overrideResult) return `${state.overrideReason} • ${state.overrideResult}`;
-  if (state.game.isCheckmate()) return `Checkmate • ${colorName(opposite(state.game.turn()))} wins`;
-  if (state.game.isStalemate()) return 'Draw • stalemate';
-  if (state.game.isInsufficientMaterial()) return 'Draw • insufficient material';
-  if (state.game.isThreefoldRepetition()) return 'Draw • threefold repetition';
-  if (state.game.isDrawByFiftyMoves()) return 'Draw • fifty-move rule';
+  if (state.overrideResult) return `${state.overrideReason} - ${state.overrideResult}`;
+  if (state.game.isCheckmate()) return `Checkmate - ${colorName(opposite(state.game.turn()))} wins`;
+  if (state.game.isStalemate()) return 'Draw - stalemate';
+  if (state.game.isInsufficientMaterial()) return 'Draw - insufficient material';
+  if (state.game.isThreefoldRepetition()) return 'Draw - threefold repetition';
+  if (state.game.isDrawByFiftyMoves()) return 'Draw - fifty-move rule';
   if (state.game.isDraw()) return 'Draw';
   if (state.trainingComplete) return 'Opening completed';
   if (state.game.isCheck()) return 'Check';
   if (state.enemyThinking) return 'Enemy choosing most popular database response';
-  return state.game.turn() === state.playerColor ? 'Your move • database chooser' : 'Enemy database reply pending';
+  return state.game.turn() === state.playerColor ? 'Your move - database chooser' : 'Enemy database reply pending';
 }
 
 function capturedPieces(history) {
@@ -1177,46 +1177,20 @@ function buildMoveStats(move, colorForScores) {
 }
 
 function choosePlayerCandidatePlan(entries, minDepth, color, policy) {
-  const masterEligible = sortBySourceScore(entries.filter((entry) => isEligibleForColor(entry, 'masters', minDepth, color)), 'masters', color);
-  const lichessEligible = sortBySourceScore(entries.filter((entry) => isEligibleForColor(entry, 'lichess', minDepth, color)), 'lichess', color);
+  const eligible = entries.filter((entry) => getMoveQualification(entry, color).qualifiesAt(minDepth));
+  const normalizedPolicy = policy === 'mostGames' || policy === 'combined' ? 'mostGames' : 'bestScore';
+  const candidates = normalizedPolicy === 'mostGames'
+    ? sortByCombinedGames(eligible, color)
+    : sortCombinedByBestScore(eligible, color);
 
-  if (policy === 'masterFirst') {
-    if (masterEligible.length) {
-      return {
-        mode: 'database',
-        policy,
-        title: `Masters lane: ${formatDepth(minDepth)}+ qualification games and ${colorName(color)} score ≥ 50%`,
-        description: 'Masters has positive-score candidates, so this lane is trained first. Qualification games are combined when both databases score ≥50%; otherwise the larger game count is used.',
-        candidates: masterEligible,
-        masterEligible,
-        lichessEligible,
-        activeSource: 'masters',
-      };
-    }
-    if (lichessEligible.length) {
-      return {
-        mode: 'database',
-        policy,
-        title: `Lichess lane: no Masters qualifiers; using Lichess 2500+`,
-        description: 'Lichess is used because Masters has no qualifying positive-score move at this depth. Qualification still uses the combined/higher-count rule.',
-        candidates: lichessEligible,
-        masterEligible,
-        lichessEligible,
-        activeSource: 'lichess',
-      };
-    }
-    return { mode: 'none', policy, candidates: [], masterEligible, lichessEligible, activeSource: null };
-  }
-
-  const combined = entries.filter((entry) => getMoveQualification(entry, color).qualifiesAt(minDepth));
   return {
-    mode: combined.length ? 'database' : 'none',
-    policy,
-    title: `Merged lanes: ${formatDepth(minDepth)}+ qualification games and ${colorName(color)} score ≥ 50%`,
-    description: 'Moves qualify if either database has your color score ≥50%. If both are positive, game counts combine; if only one is positive, the larger game count is used.',
-    candidates: sortCombinedByBestScore(combined, color),
-    masterEligible,
-    lichessEligible,
+    mode: candidates.length ? 'database' : 'none',
+    policy: normalizedPolicy,
+    title: normalizedPolicy === 'mostGames'
+      ? `Most combined games: ${formatDepth(minDepth)}+ total games and best score >= 50%`
+      : `Best score first: ${formatDepth(minDepth)}+ total games and best score >= 50%`,
+    description: 'Every candidate uses Masters games plus Lichess 2500+ games for depth. The score used is whichever source gives your color the higher score.',
+    candidates,
     activeSource: 'combined',
   };
 }
@@ -1228,14 +1202,16 @@ function getMoveQualification(entry, color) {
   const lichessGames = lichess?.total || 0;
   const mastersScore = masters ? scoreForColorStats(masters, color) : null;
   const lichessScore = lichess ? scoreForColorStats(lichess, color) : null;
-  const mastersPositive = mastersScore !== null && mastersScore >= 50;
-  const lichessPositive = lichessScore !== null && lichessScore >= 50;
-  const positiveCount = Number(mastersPositive) + Number(lichessPositive);
-  const qualificationGames = positiveCount === 2
-    ? mastersGames + lichessGames
-    : positiveCount === 1
-      ? Math.max(mastersGames, lichessGames)
-      : 0;
+  const qualificationGames = mastersGames + lichessGames;
+  const bestScore = Math.max(
+    mastersScore ?? -Infinity,
+    lichessScore ?? -Infinity,
+  );
+  const bestSource = bestScore === -Infinity
+    ? null
+    : mastersScore !== null && mastersScore >= (lichessScore ?? -Infinity)
+      ? 'masters'
+      : 'lichess';
 
   return {
     masters,
@@ -1244,18 +1220,17 @@ function getMoveQualification(entry, color) {
     lichessGames,
     mastersScore,
     lichessScore,
-    mastersPositive,
-    lichessPositive,
-    positiveCount,
+    mastersPositive: mastersScore !== null && mastersScore >= 50,
+    lichessPositive: lichessScore !== null && lichessScore >= 50,
+    bestScore,
+    bestSource,
     qualificationGames,
-    qualifiesAt: (minDepth) => positiveCount > 0 && qualificationGames >= minDepth,
+    qualifiesAt: (minDepth) => qualificationGames >= minDepth && bestScore >= 50,
   };
 }
 
-function isEligibleForColor(entry, source, minDepth, color) {
-  const q = getMoveQualification(entry, color);
-  if (!q.qualifiesAt(minDepth)) return false;
-  return source === 'masters' ? q.mastersPositive : q.lichessPositive;
+function sortByCombinedGames(entries, color) {
+  return [...entries].sort((a, b) => bestGames(b, color) - bestGames(a, color) || bestEligibleScore(b, color) - bestEligibleScore(a, color));
 }
 
 function scoreForColorStats(stats, color) {
@@ -1275,14 +1250,28 @@ function sortCombinedByBestScore(entries, color) {
 }
 
 function bestEligibleScore(entry, color) {
-  return Math.max(
-    entry.sources.masters ? scoreForColorStats(entry.sources.masters, color) : -Infinity,
-    entry.sources.lichess ? scoreForColorStats(entry.sources.lichess, color) : -Infinity,
-  );
+  const score = getMoveQualification(entry, color).bestScore;
+  return Number.isFinite(score) ? score : -Infinity;
 }
 
 function bestGames(entry, color = state.playerColor) {
   return getMoveQualification(entry, color).qualificationGames;
+}
+
+
+function formatQualificationScore(qualification) {
+  return Number.isFinite(qualification.bestScore) ? `${qualification.bestScore.toFixed(1)}%` : 'n/a';
+}
+
+function formatQualificationSource(qualification) {
+  if (qualification.bestSource === 'masters') return 'Masters';
+  if (qualification.bestSource === 'lichess') return 'Lichess';
+  return 'neither source';
+}
+
+function normalizeMovePolicy(policy) {
+  if (policy === 'combined' || policy === 'mostGames') return 'mostGames';
+  return 'bestScore';
 }
 
 function renderDatabaseMovePlan(plan, minDepth, sourceSummary) {
@@ -1293,7 +1282,7 @@ function renderDatabaseMovePlan(plan, minDepth, sourceSummary) {
   dot.style.animation = 'none';
   summary.appendChild(dot);
   const text = document.createElement('span');
-  text.textContent = `${sourceSummary}. Showing ${plan.candidates.length} line move${plan.candidates.length === 1 ? '' : 's'} for ${colorName(state.playerColor)} at ≥${formatDepth(minDepth)} qualification games and ≥50% ${colorName(state.playerColor)} score.`;
+  text.textContent = `${sourceSummary}. Showing ${plan.candidates.length} line move${plan.candidates.length === 1 ? '' : 's'} for ${colorName(state.playerColor)} at >=${formatDepth(minDepth)} combined games and best database score >=50%.`;
   summary.appendChild(text);
 
   const container = $('moves-table');
@@ -1325,9 +1314,7 @@ function createDatabaseMoveCard(entry, activeSource, displayColor = state.player
   const meta = document.createElement('div');
   meta.className = 'move-meta';
   const qualification = getMoveQualification(entry, displayColor);
-  meta.textContent = activeSource === 'combined'
-    ? `Qualified by merged lanes • ${formatNumber(qualification.qualificationGames)} qualification games.`
-    : `Selected by ${activeSource === 'masters' ? 'Masters' : 'Lichess'} lane • ${formatNumber(qualification.qualificationGames)} qualification games.`;
+  meta.textContent = `Qualified by combined games - ${formatNumber(qualification.qualificationGames)} total games - best score ${formatQualificationScore(qualification)} from ${formatQualificationSource(qualification)}.`;
 
   main.append(button, meta);
 
@@ -1348,10 +1335,10 @@ function createSourceStat(label, stats, color) {
     return box;
   }
   const score = scoreForColorStats(stats, color);
-  const positive = score >= 50 ? 'positive lane' : 'supporting games';
+  const positive = score >= 50 ? 'eligible score source' : 'games-only support';
   box.innerHTML = `
     <strong>${label}</strong>
-    <span>${formatNumber(stats.total)} games • ${positive}</span>
+    <span>${formatNumber(stats.total)} games - ${positive}</span>
     <span>${colorName(color)} score ${score.toFixed(1)}%</span>
     <span>W ${stats.whiteScore.toFixed(0)}% / B ${stats.blackScore.toFixed(0)}%</span>
   `;
@@ -1634,10 +1621,10 @@ function summarizeMoveForCoach(uci, color, dataBySource = {}) {
   return {
     qualificationGames: q.qualificationGames,
     qualifies500: q.qualifiesAt(500),
+    bestScore: Number((Number.isFinite(q.bestScore) ? q.bestScore : 0).toFixed(1)),
+    bestSource: q.bestSource,
     masters: q.masters ? simplifySourceStats(q.masters, color) : null,
     lichess: q.lichess ? simplifySourceStats(q.lichess, color) : null,
-    mastersPositive: q.mastersPositive,
-    lichessPositive: q.lichessPositive,
   };
 }
 
@@ -1870,12 +1857,12 @@ function toPlainAscii(value) {
     .replace(/[‘’]/g, "'")
     .replace(/[–—−]/g, '-')
     .replace(/…/g, '...')
-    .replace(/≥/g, '>=')
+    .replace(/>=/g, '>=')
     .replace(/≤/g, '<=')
     .replace(/→|⇒|⟶/g, '->')
     .replace(/←|⇐|⟵/g, '<-')
     .replace(/×/g, 'x')
-    .replace(/•/g, '-')
+    .replace(/-/g, '-')
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '');
 }
 
@@ -2114,7 +2101,7 @@ function arraysEqual(a, b) {
 }
 
 function summarizeResultTotals(results) {
-  return results.map((result) => `${result.shortLabel}: ${formatNumber(rootTotal(result.data))} games`).join(' • ');
+  return results.map((result) => `${result.shortLabel}: ${formatNumber(rootTotal(result.data))} games`).join(' - ');
 }
 
 function currentDepth() {
@@ -2269,7 +2256,7 @@ function saveCurrentGameState() {
       overrideResult: state.overrideResult,
       overrideReason: state.overrideReason,
       depthTierIndex: state.depthTierIndex,
-      movePolicy: state.movePolicy,
+      movePolicy: normalizeMovePolicy(state.movePolicy),
       pendingMistakesByFen: Array.from(state.pendingMistakesByFen.entries()),
     };
     localStorage.setItem(GAME_STATE_KEY, JSON.stringify(payload));
@@ -2385,7 +2372,7 @@ function loadExplorerPreferences() {
   const prefs = readJson(EXPLORER_PREF_KEY, null);
   const savedDepthIndex = Number(prefs?.depthTierIndex ?? DEFAULT_DEPTH_INDEX);
   state.depthTierIndex = Math.min(Math.max(Number.isFinite(savedDepthIndex) ? savedDepthIndex : DEFAULT_DEPTH_INDEX, 0), DEPTH_TIERS.length - 1);
-  state.movePolicy = prefs?.movePolicy || 'masterFirst';
+  state.movePolicy = normalizeMovePolicy(prefs?.movePolicy || 'bestScore');
   if ($('depth-slider')) $('depth-slider').value = String(state.depthTierIndex);
   if ($('move-policy')) $('move-policy').value = state.movePolicy;
   if ($('proxy-toggle')) $('proxy-toggle').checked = Boolean(prefs?.useProxy);
@@ -2395,7 +2382,7 @@ function saveExplorerPreferences() {
   writeJson(EXPLORER_PREF_KEY, {
     fixedSources: 'masters+lichess-2500-rapid-classical-correspondence',
     depthTierIndex: state.depthTierIndex,
-    movePolicy: state.movePolicy,
+    movePolicy: normalizeMovePolicy(state.movePolicy),
     useProxy: Boolean($('proxy-toggle')?.checked),
   });
 }
@@ -2477,7 +2464,7 @@ function formatGameMeta(game) {
   const date = game.month || game.year || '';
   const speed = game.speed ? `${game.speed}` : '';
   const mode = game.mode ? `${game.mode}` : '';
-  return [result, speed, mode, date].filter(Boolean).join(' • ');
+  return [result, speed, mode, date].filter(Boolean).join(' - ');
 }
 
 function normalizeBearerToken(token) {
