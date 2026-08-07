@@ -1564,15 +1564,32 @@ function isCoachRetryCurrent(payload) {
 
 function generateLocalCoachAdvice({ fen, accepted, mistakes }) {
   const acceptedSan = accepted?.san || accepted?.uci || 'That move';
-  const acceptedIdea = describeAcceptedMove(fen, accepted);
+  const acceptedIdea = stripEndingPunctuation(describeAcceptedMove(fen, accepted));
   const skipped = mistakes.some((m) => m.skipped || m.uci === 'skip');
 
   if (skipped) {
-    return `${acceptedSan} is the move because ${acceptedIdea}.`;
+    return normalizeCoachPunctuation(`${acceptedSan} is the move because ${acceptedIdea}.`);
   }
 
-  const mistakeIdea = describeMistakeGroup(fen, mistakes, accepted);
-  return `${acceptedSan} is the move because ${acceptedIdea}. ${mistakeIdea}`;
+  const mistakeIdea = ensureFinalPunctuation(describeMistakeGroup(fen, mistakes, accepted));
+  return normalizeCoachPunctuation(`${acceptedSan} is the move because ${acceptedIdea}. ${mistakeIdea}`);
+}
+
+function stripEndingPunctuation(text) {
+  return String(text || '').trim().replace(/[.!?]+$/g, '');
+}
+
+function ensureFinalPunctuation(text) {
+  const cleaned = String(text || '').trim();
+  return /[.!?]$/.test(cleaned) ? cleaned : `${cleaned}.`;
+}
+
+function normalizeCoachPunctuation(text) {
+  return String(text || '')
+    .replace(/([.!?])\1+/g, '$1')
+    .replace(/\s+([.!?,;:])/g, '$1')
+    .replace(/([.!?])(?=\S)/g, '$1 ')
+    .trim();
 }
 
 function describeAcceptedMove(fen, accepted) {
@@ -1890,7 +1907,7 @@ function updateCoachAdviceButtons() {
 }
 
 function formatCoachMessage(message) {
-  const plain = toPlainAscii(message)
+  const plain = normalizeCoachPunctuation(toPlainAscii(message))
     .replace(/\*\*/g, '')
     .replace(/__/g, '')
     .replace(/`/g, '')
