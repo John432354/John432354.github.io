@@ -10,7 +10,7 @@ Features:
 - Game setup for player names and side assignment: White / Black / Random
 - Side assignment controls your training side, PGN headers, and default orientation
 - Startup onboarding guide explaining board control, PGN export, APIs, and move fetching
-- Optional OpenRouter AI mentor that explains why your corrected line move was better than your rejected attempts
+- Optional Forgey AI mentor that explains why your corrected line move was better than your rejected attempts
 - PGN copy/download export and FEN copy
 - Move list, captured pieces, board flip, themes, and responsive layout
 - Lichess Opening Explorer integration for most-played human moves in the current position
@@ -46,14 +46,14 @@ The default ordering is Masters first: train positive-score Masters lane moves f
 If your attempted move fails the 500+ qualification-games / ≥50% score rule, the app shows “Hmm, try making a better move!”, adds a mistake, and automatically undoes it. If your side has no qualifying database move, the app considers the opening learned. Enemy moves choose the most popular uncompleted database response from the fixed Masters/Lichess sources, ignoring game count and score. If no such enemy database response exists, the app congratulates you, and zero-mistake lines are saved so the enemy will skip them at that depth.
 
 
-## Optional OpenRouter AI mentor
+## Optional Forgey AI mentor
 
 LineForge can explain a corrected move after you make mistakes in the same position. Flow:
 
 1. You try one or more moves that fail the 500+ qualification-games / ≥50% score rule.
 2. LineForge rejects and undoes those attempts, tracking their SAN/UCI and database stats.
 3. You then make an accepted move from that same position.
-4. If an OpenRouter key is configured, the PNG mentor character opens a speech bubble explaining why the accepted move is better than the rejected attempts.
+4. If an OpenRouter key is configured, Forgey opens a speech bubble explaining why the accepted move is better than the rejected attempts.
 
 The OpenRouter key is saved in browser `localStorage` so it persists after closing the site. The default model is:
 
@@ -122,7 +122,7 @@ npm start
 - `.gitignore` — ignores local token files
 - `.nojekyll` — makes GitHub Pages serve static assets without Jekyll processing
 - `vendor/chess.js` — local vendored chess.js ESM build
-- `assets/lineforge-coach.png` — PNG mentor character used beside the speech bubble
+- `assets/forgey.svg` — Forgey mascot used for the logo, favicon, and AI mentor
 - `vendor/chessjs-LICENSE.txt` — chess.js license
 
 ## Online multiplayer next steps

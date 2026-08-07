@@ -124,6 +124,14 @@ button:disabled {
   box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
 }
 
+.brand-logo {
+  width: 78%;
+  height: 78%;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.28));
+}
+
 .eyebrow {
   margin: 0 0 0.12rem;
   text-transform: uppercase;

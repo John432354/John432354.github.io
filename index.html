@@ -5,16 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>LineForge</title>
   <meta name="description" content="LineForge is a browser opening-lines trainer for forging, completing, and retiring repertoire branches with Lichess/Masters database rules." />
+  <link rel="icon" type="image/svg+xml" href="./assets/forgey.svg" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 
-  <aside id="ai-coach" class="ai-coach hidden" aria-live="polite" aria-label="LineForge AI coach">
-    <img class="coach-character" src="./assets/lineforge-coach.png" alt="LineForge coach character" />
+  <aside id="ai-coach" class="ai-coach hidden" aria-live="polite" aria-label="Forgey AI coach">
+    <img class="coach-character" src="./assets/forgey.svg" alt="Forgey, the LineForge mascot" />
     <div class="coach-bubble">
       <button id="coach-close-btn" class="coach-close" type="button" aria-label="Close coach message">×</button>
-      <div class="coach-title">LineForge Mentor</div>
+      <div class="coach-title">Forgey</div>
       <div id="coach-status" class="coach-status">Ready</div>
       <div id="coach-message" class="coach-message">Make a few attempts, then I will explain why the line move works.</div>
     </div>
@@ -22,7 +23,7 @@
 
   <header class="topbar">
     <div class="brand">
-      <div class="brand-mark" aria-hidden="true">⚒</div>
+      <div class="brand-mark" aria-hidden="true"><img class="brand-logo" src="./assets/forgey.svg" alt="" /></div>
       <div>
         <p class="eyebrow">Forge openings. Retire lines.</p>
         <h1>LineForge</h1>
@@ -194,9 +195,9 @@
         </details>
 
         <details class="settings-details ai-settings" open>
-          <summary>AI line mentor</summary>
+          <summary>Forgey AI mentor</summary>
           <div class="api-notes">
-            <p>Optional: connect OpenRouter and LineForge will feed the AI your rejected attempts plus the first accepted move from that same position. The mentor explains why the accepted move fit the line better.</p>
+            <p>Optional: connect OpenRouter and LineForge will feed the AI your rejected attempts plus the first accepted move from that same position. Forgey explains why the accepted move fit the line better.</p>
             <p>The default model is Google Gemma 4 26B free on OpenRouter, with automatic fallbacks to other current free/ultracheap models if it becomes unavailable.</p>
           </div>
           <label class="toggle-row">
@@ -278,7 +279,7 @@
         </section>
         <section class="onboarding-tile">
           <h3>7. Completion</h3>
-          <p>When your side has no qualifying database move, or the enemy has no uncompleted database response, the app congratulates you and completes the line. If you connect OpenRouter, the mascot mentor explains why your corrected move beat your rejected attempts.</p>
+          <p>When your side has no qualifying database move, or the enemy has no uncompleted database response, the app congratulates you and completes the line. If you connect OpenRouter, Forgey explains why your corrected move beat your rejected attempts.</p>
         </section>
         <section class="onboarding-tile">
           <h3>8. API access and tokens</h3>

@@ -1410,8 +1410,8 @@ function queueCoachForAcceptedMove(fen, move, validationData) {
   const key = $('openrouter-key')?.value.trim() || readSession(OPENROUTER_KEY);
   if (!key) {
     showCoachMessage(
-      'AI mentor not connected',
-      'I noticed your corrected move after those rejected attempts, but I need an OpenRouter API key before I can explain it. Add one under “AI line mentor,” then future corrected moves will get a full explanation.',
+      'Forgey not connected',
+      'I noticed your corrected move after those rejected attempts, but I need an OpenRouter API key before I can explain it. Add one under Forgey AI mentor, then future corrected moves will get a full explanation.',
     );
     return;
   }
@@ -1427,7 +1427,7 @@ function queueCoachForAcceptedMove(fen, move, validationData) {
   };
 
   requestCoachExplanation({ fen, accepted, mistakes, validationData, key }).catch((error) => {
-    showCoachMessage('AI mentor error', `OpenRouter could not generate an explanation: ${error.message || error}`);
+    showCoachMessage('Forgey error', `OpenRouter could not generate an explanation: ${error.message || error}`);
   });
 }
 
@@ -1509,7 +1509,7 @@ async function requestCoachExplanation(payload) {
   const messages = [
     {
       role: 'system',
-      content: 'You are the LineForge Mentor, a friendly chess opening coach for club players. Keep the explanation very short and accessible. Explain the accepted move as a practical chess idea, then briefly say why the rejected attempt or attempts were less useful. Do not analyze every rejected move one by one unless there is only one. Group similar mistakes together. Avoid jargon unless you explain it in plain words. Do not discuss databases, Lichess, Masters, numbers, percentages, scores, win rates, game counts, qualification games, API rules, model names, statistics, popularity, or reliability. Output plain ASCII text only: no Markdown, no bullets, no tables, no emojis, no arrows, no chess figurines, no special Unicode symbols. Maximum 90 words. Use 3 to 5 short sentences total.',
+      content: 'You are Forgey, the friendly LineForge mascot and chess opening coach for club players. Keep the explanation very short and accessible. Explain the accepted move as a practical chess idea, then briefly say why the rejected attempt or attempts were less useful. Do not analyze every rejected move one by one unless there is only one. Group similar mistakes together. Avoid jargon unless you explain it in plain words. Do not discuss databases, Lichess, Masters, numbers, percentages, scores, win rates, game counts, qualification games, API rules, model names, statistics, popularity, or reliability. Output plain ASCII text only: no Markdown, no bullets, no tables, no emojis, no arrows, no chess figurines, no special Unicode symbols. Maximum 90 words. Use 3 to 5 short sentences total.',
     },
     {
       role: 'user',
@@ -1548,7 +1548,7 @@ async function callOpenRouterModel({ key, model, messages }) {
       'Authorization': `Bearer ${key}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': location.href,
-      'X-Title': 'LineForge',
+      'X-Title': 'LineForge with Forgey',
     },
     body: JSON.stringify({
       model,
