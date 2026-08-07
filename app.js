@@ -310,8 +310,8 @@ function wireEvents() {
   });
 
   $('coach-close-btn').addEventListener('click', () => hideCoach());
-  $('coach-local-btn').addEventListener('click', () => showStoredCoachAdvice('local'));
-  $('coach-ai-btn').addEventListener('click', () => showStoredCoachAdvice('ai'));
+  $('coach-local-btn')?.addEventListener('click', () => showStoredCoachAdvice('local'));
+  $('coach-ai-btn')?.addEventListener('click', () => showStoredCoachAdvice('ai'));
 
   $('api-token').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
@@ -1426,16 +1426,19 @@ function queueCoachForAcceptedMove(fen, move, validationData) {
     color: state.playerColor,
     stats: summarizeMoveForCoach(toUci(move), state.playerColor, validationData),
   };
-  const localAdvice = generateLocalCoachAdvice({ fen, accepted, mistakes });
-  state.lastCoachLocalAdvice = localAdvice;
+  const localAdvice = generateLocalCoachAdvice({ fen, accepted, mistakes }); // kept for future/local-mode work, not currently shown
+  state.lastCoachLocalAdvice = '';
   state.lastCoachAiAdvice = '';
-  showCoachMessage('Forgey local advice', localAdvice, { mode: 'local' });
 
   const key = $('openrouter-key')?.value.trim() || readSession(OPENROUTER_KEY);
-  if (!state.aiCoachEnabled || !key) return;
+  if (!state.aiCoachEnabled || !key) {
+    showCoachMessage('Forgey needs OpenRouter', 'Add an OpenRouter key to get an explanation for this correction. Local advice is disabled for now.');
+    return;
+  }
 
   state.pendingMistakesByFen.delete(fen);
   saveCurrentGameState();
+  showCoachMessage('Forgey is thinking', 'Asking Gemma for a short explanation...');
   startCoachAiRetries({ fen, accepted, mistakes, validationData, key, localAdvice });
 }
 
@@ -1454,7 +1457,7 @@ function attemptCoachAiRetry(payload) {
   requestCoachExplanation(payload).catch((error) => {
     if (!isCoachRetryCurrent(payload)) return;
     const delay = Math.min(60000, 12000 + payload.attempt * 8000);
-    setCoachStatus(`Forgey is still trying Gemma in the background. Local advice is active.`);
+    setCoachStatus('Forgey is still trying Gemma in the background...');
     state.coachRetryTimer = setTimeout(() => {
       attemptCoachAiRetry({ ...payload, attempt: payload.attempt + 1 });
     }, delay);
@@ -1625,7 +1628,9 @@ async function requestCoachExplanation(payload) {
       saveCoachPreferences();
       if (state.coachRetryTimer) clearTimeout(state.coachRetryTimer);
       state.coachRetryTimer = null;
-      showCoachMessage('Forgey AI advice', cleanCoachExplanation(explanation, context, payload.localAdvice), { mode: 'ai' });
+      const cleaned = cleanCoachExplanation(explanation, context);
+      if (!cleaned) throw new Error('AI output did not pass Forgey quality filters');
+      showCoachMessage('Forgey AI advice', cleaned, { mode: 'ai' });
       return;
     } catch (error) {
       errors.push(`${model}: ${error.message || error}`);
@@ -1673,16 +1678,16 @@ function uniqueStrings(values) {
 }
 
 
-function cleanCoachExplanation(message, context, localAdvice = '') {
+function cleanCoachExplanation(message, context) {
   const plain = toPlainAscii(message).replace(/\s+/g, ' ').trim();
-  if (hasMetaCoachLanguage(plain) || hasStatsLanguage(plain)) return localAdvice || fallbackCoachExplanation(context);
+  if (hasMetaCoachLanguage(plain) || hasStatsLanguage(plain)) return '';
   const sentences = plain.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
   const cleanSentences = sentences
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence && !hasStatsLanguage(sentence) && !hasMetaCoachLanguage(sentence));
   const cleaned = cleanSentences.join(' ').trim();
   if (cleaned && !hasStatsLanguage(cleaned) && !hasMetaCoachLanguage(cleaned)) return limitWords(cleaned, 95);
-  return localAdvice || fallbackCoachExplanation(context);
+  return '';
 }
 
 function hasStatsLanguage(text) {

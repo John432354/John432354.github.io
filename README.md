@@ -53,7 +53,7 @@ LineForge can explain a corrected move after you make mistakes in the same posit
 1. You try one or more moves that fail the 500+ qualification-games / ≥50% score rule.
 2. LineForge rejects and undoes those attempts, tracking their SAN/UCI and database stats.
 3. You then make an accepted move from that same position.
-4. Forgey immediately shows a local explanation. If an OpenRouter key is configured, Forgey then replaces it with AI advice once Gemma returns an answer. You can switch back to the local explanation with the Local advice button.
+4. If an OpenRouter key is configured, Forgey keeps trying Gemma in the background until it gets a usable explanation. A local-advice framework remains in the codebase for future use, but it is not exposed in the current UI.
 
 The OpenRouter key is saved in browser `localStorage` so it persists after closing the site. The default model is:
 
