@@ -1563,44 +1563,75 @@ function isCoachRetryCurrent(payload) {
 }
 
 function generateLocalCoachAdvice({ fen, accepted, mistakes }) {
-  const acceptedIdea = describeAcceptedMove(fen, accepted);
-  const mistakeIdea = describeMistakeGroup(fen, mistakes);
   const acceptedSan = accepted?.san || accepted?.uci || 'That move';
-  return `${acceptedSan} is better because ${acceptedIdea}. ${mistakeIdea} The simple goal is to make a move that improves your position and gives your next few moves a clear plan.`;
+  const acceptedIdea = describeAcceptedMove(fen, accepted);
+  const skipped = mistakes.some((m) => m.skipped || m.uci === 'skip');
+
+  if (skipped) {
+    return `${acceptedSan} is the move because ${acceptedIdea}.`;
+  }
+
+  const mistakeIdea = describeMistakeGroup(fen, mistakes, accepted);
+  return `${acceptedSan} is the move because ${acceptedIdea}. ${mistakeIdea}`;
 }
 
 function describeAcceptedMove(fen, accepted) {
   const move = accepted?.uci || '';
   const from = move.slice(0, 2);
   const to = move.slice(2, 4);
+  let board = null;
   let piece = null;
-  try { piece = new Chess(fen).get(from); } catch {}
+  let legal = null;
+  try {
+    board = new Chess(fen);
+    piece = board.get(from);
+    legal = board.moves({ verbose: true }).find((candidate) => toUci(candidate) === move);
+  } catch {}
+
   const type = piece?.type;
+  const color = piece?.color;
   const file = to[0];
   const rank = to[1];
+  const captureText = legal?.captured ? ' It also removes an enemy piece, so the move gains time.' : '';
+  const checkText = legal?.san?.includes('+') ? ' Because it gives check, the opponent must answer your idea right away.' : '';
 
   if (type === 'p' && ['d', 'e'].includes(file) && ['4', '5'].includes(rank)) {
-    return 'it claims central space and opens lines for your pieces';
+    return `it takes central space, opens lines for your pieces, and makes the opponent deal with your pawn in the middle.${captureText}${checkText}`;
   }
-  if (type === 'p' && ['c', 'f'].includes(file) && ['4', '5'].includes(rank)) {
-    return 'it gains useful space and supports a more active pawn plan';
+  if (type === 'p' && file === 'f' && ['4', '5'].includes(rank)) {
+    return `it grabs kingside space while supporting a direct central plan. It can help you push forward later or open the f-file if the position calls for it.${captureText}${checkText}`;
+  }
+  if (type === 'p' && file === 'c' && ['4', '5'].includes(rank)) {
+    return `it challenges the center from the side and can make the opponent's central pawn structure less comfortable.${captureText}${checkText}`;
   }
   if (type === 'p' && ['b', 'g'].includes(file) && ['3', '6'].includes(rank)) {
-    return 'it prepares a bishop on the long diagonal while keeping the center flexible';
+    return `it prepares your bishop for the long diagonal while keeping the center flexible. That bishop can become a long-range defender and attacker.${captureText}${checkText}`;
   }
   if (type === 'n' && ['c3', 'f3', 'c6', 'f6'].includes(to)) {
-    return 'it develops a knight toward the center where it controls important squares';
+    return `it develops the knight toward the center, controls important squares, and helps your king get ready to castle.${captureText}${checkText}`;
   }
-  if (type === 'b') return 'it develops a bishop and brings another piece into the game';
-  if (type === 'k' && Math.abs(from.charCodeAt(0) - to.charCodeAt(0)) === 2) return 'it gets your king safe and brings the rook closer to the game';
-  if (type === 'q') return 'it improves coordination without losing sight of the center';
-  return 'it improves your setup and keeps your pieces working together';
+  if (type === 'n' && ['d2', 'e2', 'd7', 'e7', 'b3', 'g3', 'b6', 'g6'].includes(to)) {
+    return `it reroutes the knight to a useful support square without putting it on the edge of the board.${captureText}${checkText}`;
+  }
+  if (type === 'b') {
+    return `it brings a bishop into the game and adds pressure along a diagonal instead of leaving that piece boxed in.${captureText}${checkText}`;
+  }
+  if (type === 'k' && Math.abs(from.charCodeAt(0) - to.charCodeAt(0)) === 2) {
+    return 'it gets your king safe and brings a rook closer to the center.';
+  }
+  if (type === 'q') {
+    return `it supports the center and coordinates your pieces without drifting too far from the rest of your army.${captureText}${checkText}`;
+  }
+  if (type === 'r') {
+    return `it puts a rook on a more useful file, where it can support a center break or pressure an open line.${captureText}${checkText}`;
+  }
+  return `it improves your most useful piece or pawn for the position and gives the rest of your setup a clearer direction.${captureText}${checkText}`;
 }
 
-function describeMistakeGroup(fen, mistakes) {
-  if (mistakes.some((m) => m.skipped || m.uci === 'skip')) {
-    return 'Skipping means you were unsure of the plan, so focus on what the chosen move improves right away.';
-  }
+function describeMistakeGroup(fen, mistakes, accepted) {
+  const acceptedSan = accepted?.san || accepted?.uci || 'the line move';
+  const acceptedUci = accepted?.uci || '';
+  const acceptedTo = acceptedUci.slice(2, 4);
   const moves = mistakes.map((m) => m.uci || '').filter(Boolean);
   const pieces = moves.map((uci) => {
     try { return new Chess(fen).get(uci.slice(0, 2))?.type || ''; } catch { return ''; }
@@ -1608,15 +1639,26 @@ function describeMistakeGroup(fen, mistakes) {
   const tos = moves.map((uci) => uci.slice(2, 4));
 
   if (pieces.length && pieces.every((p) => p === 'q')) {
-    return 'The rejected queen moves spend time with the queen before the rest of your pieces are ready, so the queen can become a target.';
+    return `The rejected queen moves tried to use the queen before the minor pieces were ready, which can make the queen a target and slow your development.`;
   }
   if (pieces.some((p, i) => p === 'n' && ['a', 'h'].includes(tos[i]?.[0]))) {
-    return 'The rejected knight move heads to the edge, where the knight controls fewer central squares and is harder to bring back.';
+    return `The rejected knight move put a knight on the rim, where it controls fewer center squares and is harder to bring back into the fight.`;
+  }
+  if (isCentralPawnMove(acceptedUci) && pieces.every((p) => p === 'p')) {
+    return `The rejected pawn move was slower: it supported your setup, but it did not challenge the center or take space the way ${acceptedSan} does.`;
   }
   if (pieces.every((p) => p === 'p')) {
-    return 'The rejected pawn moves were slower or less forcing, so they gave the opponent more freedom.';
+    return `The rejected pawn moves were quieter waiting moves, while ${acceptedSan} changes the position and asks the opponent a question.`;
   }
-  return 'The rejected moves were less direct, either developing less useful pieces or giving the opponent an easier setup.';
+  if (pieces.includes('q')) {
+    return `The rejected queen idea spent time with a piece that can be chased. ${acceptedSan} improves the position without giving the opponent such an easy target.`;
+  }
+  return `The rejected moves were less direct; ${acceptedSan} improves the part of the position that matters right now instead of letting the opponent settle comfortably.`;
+}
+
+function isCentralPawnMove(uci) {
+  const to = uci.slice(2, 4);
+  return ['d4', 'e4', 'd5', 'e5'].includes(to);
 }
 
 function summarizeMoveForCoach(uci, color, dataBySource = {}) {
