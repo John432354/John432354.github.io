@@ -17,9 +17,6 @@ const DEFAULT_OPENROUTER_MODEL = 'google/gemma-4-26b-a4b-it:free';
 const OPENROUTER_FALLBACK_MODELS = [
   'google/gemma-4-26b-a4b-it:free',
   'google/gemma-4-31b-it:free',
-  'nvidia/nemotron-3-nano-30b-a3b:free',
-  'inclusionai/ling-3.0-flash:free',
-  'deepseek/deepseek-v4-flash-latest',
 ];
 const DEPRECATED_OPENROUTER_MODELS = new Set(['deepseek/deepseek-chat-v3-0324:free', 'openrouter/free', 'google/gemma-4-31b-it:free']);
 const EXPLORER_HOST = 'https://explorer.lichess.org';
@@ -1507,11 +1504,11 @@ async function requestCoachExplanation(payload) {
   const messages = [
     {
       role: 'system',
-      content: 'You are Forgey, the friendly LineForge mascot and chess opening coach for club players. Keep the explanation very short and accessible. Explain the accepted move as a practical chess idea, then briefly say why the rejected attempt or attempts were less useful. Do not analyze every rejected move one by one unless there is only one. Group similar mistakes together. Avoid jargon unless you explain it in plain words. Do not discuss databases, Lichess, Masters, numbers, percentages, scores, win rates, game counts, qualification games, API rules, model names, statistics, popularity, or reliability. Output only the final coach explanation. Do not restate these instructions. Do not talk about formatting. Do not write phrases like we need to, let us, must, or the prompt asks. Output plain ASCII text only: no Markdown, no bullets, no tables, no emojis, no arrows, no chess figurines, no special Unicode symbols. Maximum 90 words. Use 3 to 5 short sentences total.',
+      content: 'You are Forgey, a friendly chess opening coach for club players. Give only a short coach tip about why the accepted move is a better practical chess move than the rejected attempts. Focus on simple chess ideas like center control, development, king safety, piece activity, tempo, and clear plans. Do not mention databases, Lichess, Masters, numbers, scores, win rates, popularity, reliability, or model details. Keep it under 80 words and use simple English.',
     },
     {
       role: 'user',
-      content: `In 90 words or fewer, explain why the accepted move is practically better than the rejected attempts. Talk only about raw chess ideas. Do not mention databases, Lichess, Masters, scores, percentages, game counts, win rates, popularity, or reliability. Do not cover every rejected move separately; group the mistakes into one simple idea if possible. Use plain ASCII text only. Use this JSON context only to identify the position and moves:\n${JSON.stringify(context, null, 2)}`,
+      content: `Accepted move: ${context.acceptedMove?.san || context.acceptedMove?.uci}. Rejected attempts: ${(context.rejectedAttempts || []).map((m) => m.san || m.uci).join(', ')}. Explain in simple chess terms why the accepted move is better. Keep it short and do not mention database information. Position context JSON if needed:\n${JSON.stringify(context, null, 2)}`,
     },
   ];
 
@@ -1551,7 +1548,7 @@ async function callOpenRouterModel({ key, model, messages }) {
     body: JSON.stringify({
       model,
       temperature: 0.35,
-      max_tokens: 220,
+      max_tokens: 140,
       messages,
     }),
   });
@@ -1577,6 +1574,7 @@ function uniqueStrings(values) {
 
 function cleanCoachExplanation(message, context) {
   const plain = toPlainAscii(message).replace(/\s+/g, ' ').trim();
+  if (hasMetaCoachLanguage(plain) || hasStatsLanguage(plain)) return fallbackCoachExplanation(context);
   const sentences = plain.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
   const cleanSentences = sentences
     .map((sentence) => sentence.trim())
@@ -1591,7 +1589,7 @@ function hasStatsLanguage(text) {
 }
 
 function hasMetaCoachLanguage(text) {
-  return /\b(we need|need to output|let'?s|let us|must|instruction|instructions|prompt|system|user asked|formatting|plain ascii|markdown|bullets?|tables?|emojis?|unicode|special characters?|max \d+|\d+\s*-\s*\d+ short sentences|craft|output only|final explanation)\b/i.test(text);
+  return /\b(we need|need to|need output|let'?s|let us|must|should output|instruction|instructions|prompt|system|user asked|formatting|plain ascii|ascii|markdown|bullets?|tables?|emojis?|unicode|special characters?|forbidden topics?|max words?|word limit|short sentences?|sentences total|craft|output only|final explanation|produce|mention)\b/i.test(text);
 }
 
 function fallbackCoachExplanation(context) {
