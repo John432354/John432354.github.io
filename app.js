@@ -17,8 +17,6 @@ const DEFAULT_OPENROUTER_MODEL = 'google/gemma-4-26b-a4b-it:free';
 const OPENROUTER_FALLBACK_MODELS = [
   'google/gemma-4-26b-a4b-it:free',
   'google/gemma-4-31b-it:free',
-  'openai/gpt-oss-20b:free',
-  'openrouter/free',
   'nvidia/nemotron-3-nano-30b-a3b:free',
   'inclusionai/ling-3.0-flash:free',
   'deepseek/deepseek-v4-flash-latest',
@@ -1509,7 +1507,7 @@ async function requestCoachExplanation(payload) {
   const messages = [
     {
       role: 'system',
-      content: 'You are Forgey, the friendly LineForge mascot and chess opening coach for club players. Keep the explanation very short and accessible. Explain the accepted move as a practical chess idea, then briefly say why the rejected attempt or attempts were less useful. Do not analyze every rejected move one by one unless there is only one. Group similar mistakes together. Avoid jargon unless you explain it in plain words. Do not discuss databases, Lichess, Masters, numbers, percentages, scores, win rates, game counts, qualification games, API rules, model names, statistics, popularity, or reliability. Output plain ASCII text only: no Markdown, no bullets, no tables, no emojis, no arrows, no chess figurines, no special Unicode symbols. Maximum 90 words. Use 3 to 5 short sentences total.',
+      content: 'You are Forgey, the friendly LineForge mascot and chess opening coach for club players. Keep the explanation very short and accessible. Explain the accepted move as a practical chess idea, then briefly say why the rejected attempt or attempts were less useful. Do not analyze every rejected move one by one unless there is only one. Group similar mistakes together. Avoid jargon unless you explain it in plain words. Do not discuss databases, Lichess, Masters, numbers, percentages, scores, win rates, game counts, qualification games, API rules, model names, statistics, popularity, or reliability. Output only the final coach explanation. Do not restate these instructions. Do not talk about formatting. Do not write phrases like we need to, let us, must, or the prompt asks. Output plain ASCII text only: no Markdown, no bullets, no tables, no emojis, no arrows, no chess figurines, no special Unicode symbols. Maximum 90 words. Use 3 to 5 short sentences total.',
     },
     {
       role: 'user',
@@ -1582,14 +1580,18 @@ function cleanCoachExplanation(message, context) {
   const sentences = plain.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
   const cleanSentences = sentences
     .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence && !hasStatsLanguage(sentence));
+    .filter((sentence) => sentence && !hasStatsLanguage(sentence) && !hasMetaCoachLanguage(sentence));
   const cleaned = cleanSentences.join(' ').trim();
-  if (cleaned && !hasStatsLanguage(cleaned)) return limitWords(cleaned, 95);
+  if (cleaned && !hasStatsLanguage(cleaned) && !hasMetaCoachLanguage(cleaned)) return limitWords(cleaned, 95);
   return fallbackCoachExplanation(context);
 }
 
 function hasStatsLanguage(text) {
   return /\b(database|databases|lichess|masters?|score|scores|scored|scoring|percentage|percent|statistics?|stats?|games?|winrate|rates?|wins?|won|draws?|losses|loses|lost|ratio|ratios|popular|popularity|reliable|reliability|qualification|api)\b|%|\d+\s*percent/i.test(text);
+}
+
+function hasMetaCoachLanguage(text) {
+  return /\b(we need|need to output|let'?s|let us|must|instruction|instructions|prompt|system|user asked|formatting|plain ascii|markdown|bullets?|tables?|emojis?|unicode|special characters?|max \d+|\d+\s*-\s*\d+ short sentences|craft|output only|final explanation)\b/i.test(text);
 }
 
 function fallbackCoachExplanation(context) {
