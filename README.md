@@ -53,7 +53,7 @@ LineForge can explain a corrected move after you make mistakes in the same posit
 1. You try one or more moves that fail the 500+ qualification-games / ≥50% score rule.
 2. LineForge rejects and undoes those attempts, tracking their SAN/UCI and database stats.
 3. You then make an accepted move from that same position.
-4. If an OpenRouter key is configured, Forgey opens a speech bubble explaining why the accepted move is better than the rejected attempts.
+4. Forgey immediately shows a local explanation. If an OpenRouter key is configured, Forgey then replaces it with AI advice once Gemma returns an answer. You can switch back to the local explanation with the Local advice button.
 
 The OpenRouter key is saved in browser `localStorage` so it persists after closing the site. The default model is:
 

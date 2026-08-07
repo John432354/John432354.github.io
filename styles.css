@@ -1174,6 +1174,36 @@ textarea:focus {
   margin: 0 0 0.55rem;
 }
 
+.coach-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-top: 0.8rem;
+}
+
+.coach-actions.hidden {
+  display: none;
+}
+
+.coach-action-btn {
+  border: 1px solid rgba(120, 214, 198, 0.22);
+  color: var(--text);
+  background: rgba(120, 214, 198, 0.09);
+  border-radius: 999px;
+  min-height: 1.9rem;
+  padding: 0.35rem 0.62rem;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.coach-action-btn:hover,
+.coach-action-btn.active {
+  color: #101827;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-color: transparent;
+}
+
 .coach-close {
   position: absolute;
   top: 0.48rem;

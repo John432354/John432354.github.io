@@ -81,6 +81,9 @@ const state = {
   openRouterModel: DEFAULT_OPENROUTER_MODEL,
   pendingMistakesByFen: new Map(),
   coachRequestId: 0,
+  lastCoachLocalAdvice: '',
+  lastCoachAiAdvice: '',
+  lastCoachMode: 'local',
   serverProxyAvailable: false,
   staticHosting: false,
   overrideResult: null,
@@ -297,6 +300,8 @@ function wireEvents() {
   });
 
   $('coach-close-btn').addEventListener('click', () => hideCoach());
+  $('coach-local-btn').addEventListener('click', () => showStoredCoachAdvice('local'));
+  $('coach-ai-btn').addEventListener('click', () => showStoredCoachAdvice('ai'));
 
   $('api-token').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
@@ -1401,18 +1406,6 @@ function queueCoachForAcceptedMove(fen, move, validationData) {
   const mistakes = state.pendingMistakesByFen.get(fen) || [];
   if (!mistakes.length) return;
 
-  if (!state.aiCoachEnabled) return;
-  const key = $('openrouter-key')?.value.trim() || readSession(OPENROUTER_KEY);
-  if (!key) {
-    showCoachMessage(
-      'Forgey not connected',
-      'I noticed your corrected move after those rejected attempts, but I need an OpenRouter API key before I can explain it. Add one under Forgey AI mentor, then future corrected moves will get a full explanation.',
-    );
-    return;
-  }
-  state.pendingMistakesByFen.delete(fen);
-  saveCurrentGameState();
-
   const accepted = {
     uci: toUci(move),
     san: move.san || toUci(move),
@@ -1420,10 +1413,75 @@ function queueCoachForAcceptedMove(fen, move, validationData) {
     color: state.playerColor,
     stats: summarizeMoveForCoach(toUci(move), state.playerColor, validationData),
   };
+  const localAdvice = generateLocalCoachAdvice({ fen, accepted, mistakes });
+  state.lastCoachLocalAdvice = localAdvice;
+  state.lastCoachAiAdvice = '';
+  showCoachMessage('Forgey local advice', localAdvice, { mode: 'local' });
 
-  requestCoachExplanation({ fen, accepted, mistakes, validationData, key }).catch((error) => {
-    showCoachMessage('Forgey error', `OpenRouter could not generate an explanation: ${error.message || error}`);
+  const key = $('openrouter-key')?.value.trim() || readSession(OPENROUTER_KEY);
+  if (!state.aiCoachEnabled || !key) return;
+
+  state.pendingMistakesByFen.delete(fen);
+  saveCurrentGameState();
+  requestCoachExplanation({ fen, accepted, mistakes, validationData, key, localAdvice }).catch((error) => {
+    showCoachMessage('Forgey local advice', localAdvice, { mode: 'local' });
+    toast(`Forgey AI was unavailable, so local advice stayed active: ${error.message || error}`);
   });
+}
+
+
+function generateLocalCoachAdvice({ fen, accepted, mistakes }) {
+  const acceptedIdea = describeAcceptedMove(fen, accepted);
+  const mistakeIdea = describeMistakeGroup(fen, mistakes);
+  const acceptedSan = accepted?.san || accepted?.uci || 'That move';
+  return `${acceptedSan} is better because ${acceptedIdea}. ${mistakeIdea} The simple goal is to make a move that improves your position and gives your next few moves a clear plan.`;
+}
+
+function describeAcceptedMove(fen, accepted) {
+  const move = accepted?.uci || '';
+  const from = move.slice(0, 2);
+  const to = move.slice(2, 4);
+  let piece = null;
+  try { piece = new Chess(fen).get(from); } catch {}
+  const type = piece?.type;
+  const file = to[0];
+  const rank = to[1];
+
+  if (type === 'p' && ['d', 'e'].includes(file) && ['4', '5'].includes(rank)) {
+    return 'it claims central space and opens lines for your pieces';
+  }
+  if (type === 'p' && ['c', 'f'].includes(file) && ['4', '5'].includes(rank)) {
+    return 'it gains useful space and supports a more active pawn plan';
+  }
+  if (type === 'p' && ['b', 'g'].includes(file) && ['3', '6'].includes(rank)) {
+    return 'it prepares a bishop on the long diagonal while keeping the center flexible';
+  }
+  if (type === 'n' && ['c3', 'f3', 'c6', 'f6'].includes(to)) {
+    return 'it develops a knight toward the center where it controls important squares';
+  }
+  if (type === 'b') return 'it develops a bishop and brings another piece into the game';
+  if (type === 'k' && Math.abs(from.charCodeAt(0) - to.charCodeAt(0)) === 2) return 'it gets your king safe and brings the rook closer to the game';
+  if (type === 'q') return 'it improves coordination without losing sight of the center';
+  return 'it improves your setup and keeps your pieces working together';
+}
+
+function describeMistakeGroup(fen, mistakes) {
+  const moves = mistakes.map((m) => m.uci || '').filter(Boolean);
+  const pieces = moves.map((uci) => {
+    try { return new Chess(fen).get(uci.slice(0, 2))?.type || ''; } catch { return ''; }
+  });
+  const tos = moves.map((uci) => uci.slice(2, 4));
+
+  if (pieces.length && pieces.every((p) => p === 'q')) {
+    return 'The rejected queen moves spend time with the queen before the rest of your pieces are ready, so the queen can become a target.';
+  }
+  if (pieces.some((p, i) => p === 'n' && ['a', 'h'].includes(tos[i]?.[0]))) {
+    return 'The rejected knight move heads to the edge, where the knight controls fewer central squares and is harder to bring back.';
+  }
+  if (pieces.every((p) => p === 'p')) {
+    return 'The rejected pawn moves were slower or less forcing, so they gave the opponent more freedom.';
+  }
+  return 'The rejected moves were less direct, either developing less useful pieces or giving the opponent an easier setup.';
 }
 
 function summarizeMoveForCoach(uci, color, dataBySource = {}) {
@@ -1455,7 +1513,7 @@ function simplifySourceStats(stats, color) {
   };
 }
 
-function buildCoachContext({ fen, accepted, mistakes, validationData }) {
+function buildCoachContext({ fen, accepted, mistakes, validationData, localAdvice }) {
   const historyAfter = getHistoryUcis();
   const historyBefore = historyAfter.slice(0, -1);
   const opening = validationData?.masters?.opening || validationData?.lichess?.opening || null;
@@ -1469,7 +1527,8 @@ function buildCoachContext({ fen, accepted, mistakes, validationData }) {
     acceptedMove: moveForCoachOnly(accepted),
     rejectedAttempts: mistakes.map(moveForCoachOnly),
     forbiddenTopics: ['database stats', 'Lichess', 'Masters', 'scores', 'percentages', 'game counts', 'win rates', 'popularity'],
-    desiredStyle: 'Plain English, 3 to 5 short sentences, raw chess ideas only.',
+    localBaselineAdvice: localAdvice || '',
+    desiredStyle: 'Plain English, 3 to 5 short sentences, raw chess ideas only. Improve the local baseline only if you can be more specific.',
   };
 }
 
@@ -1498,17 +1557,17 @@ async function requestCoachExplanation(payload) {
   state.openRouterModel = requestedModel;
   if ($('openrouter-model')) $('openrouter-model').value = requestedModel;
   saveCoachPreferences();
-  showCoachMessage('Thinking...', 'I am comparing your rejected attempts with the line move you found. One moment.');
+  setCoachStatus('Forgey is asking Gemma...');
 
   const context = buildCoachContext(payload);
   const messages = [
     {
       role: 'system',
-      content: 'You are Forgey, a friendly chess opening coach for club players. Give only a short coach tip about why the accepted move is a better practical chess move than the rejected attempts. Focus on simple chess ideas like center control, development, king safety, piece activity, tempo, and clear plans. Do not mention databases, Lichess, Masters, numbers, scores, win rates, popularity, reliability, or model details. Keep it under 80 words and use simple English.',
+      content: 'You are Forgey, a friendly chess opening coach for club players. You will receive a local baseline explanation and move context. Give only a short coach tip about why the accepted move is a better practical chess move than the rejected attempts. Prefer the local baseline if it is good; improve it only with concrete chess ideas. Focus on center control, development, king safety, piece activity, tempo, and clear plans. Do not mention databases, Lichess, Masters, numbers, scores, win rates, popularity, reliability, or model details. Keep it under 80 words and use simple English.',
     },
     {
       role: 'user',
-      content: `Accepted move: ${context.acceptedMove?.san || context.acceptedMove?.uci}. Rejected attempts: ${(context.rejectedAttempts || []).map((m) => m.san || m.uci).join(', ')}. Explain in simple chess terms why the accepted move is better. Keep it short and do not mention database information. Position context JSON if needed:\n${JSON.stringify(context, null, 2)}`,
+      content: `Local baseline advice: ${payload.localAdvice || ''}\nAccepted move: ${context.acceptedMove?.san || context.acceptedMove?.uci}. Rejected attempts: ${(context.rejectedAttempts || []).map((m) => m.san || m.uci).join(', ')}. Give a short practical chess explanation. Do not mention database information. Position context JSON if needed:\n${JSON.stringify(context, null, 2)}`,
     },
   ];
 
@@ -1517,14 +1576,14 @@ async function requestCoachExplanation(payload) {
   for (let i = 0; i < models.length; i += 1) {
     const model = models[i];
     if (id !== state.coachRequestId) return;
-    showCoachMessage('Thinking...', `Trying ${model}${i ? ' after the previous model was unavailable' : ''}...`);
+    setCoachStatus(`Forgey is trying ${model}${i ? ' after the previous model was unavailable' : ''}...`);
     try {
       const explanation = await callOpenRouterModel({ key: payload.key, model, messages });
       if (id !== state.coachRequestId) return;
       state.openRouterModel = model;
       if ($('openrouter-model')) $('openrouter-model').value = model;
       saveCoachPreferences();
-      showCoachMessage('Why that line move was better', cleanCoachExplanation(explanation, context));
+      showCoachMessage('Forgey AI advice', cleanCoachExplanation(explanation, context, payload.localAdvice), { mode: 'ai' });
       return;
     } catch (error) {
       errors.push(`${model}: ${error.message || error}`);
@@ -1572,16 +1631,16 @@ function uniqueStrings(values) {
 }
 
 
-function cleanCoachExplanation(message, context) {
+function cleanCoachExplanation(message, context, localAdvice = '') {
   const plain = toPlainAscii(message).replace(/\s+/g, ' ').trim();
-  if (hasMetaCoachLanguage(plain) || hasStatsLanguage(plain)) return fallbackCoachExplanation(context);
+  if (hasMetaCoachLanguage(plain) || hasStatsLanguage(plain)) return localAdvice || fallbackCoachExplanation(context);
   const sentences = plain.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
   const cleanSentences = sentences
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence && !hasStatsLanguage(sentence) && !hasMetaCoachLanguage(sentence));
   const cleaned = cleanSentences.join(' ').trim();
   if (cleaned && !hasStatsLanguage(cleaned) && !hasMetaCoachLanguage(cleaned)) return limitWords(cleaned, 95);
-  return fallbackCoachExplanation(context);
+  return localAdvice || fallbackCoachExplanation(context);
 }
 
 function hasStatsLanguage(text) {
@@ -1604,14 +1663,46 @@ function limitWords(text, maxWords) {
   return words.length <= maxWords ? text : `${words.slice(0, maxWords).join(' ')}.`;
 }
 
-function showCoachMessage(status, message) {
+function showCoachMessage(status, message, options = {}) {
   const coach = $('ai-coach');
   const statusEl = $('coach-status');
   const messageEl = $('coach-message');
   if (!coach || !statusEl || !messageEl) return;
   statusEl.textContent = toPlainAscii(status);
   messageEl.innerHTML = formatCoachMessage(message);
+  if (options.mode === 'local') state.lastCoachLocalAdvice = message;
+  if (options.mode === 'ai') state.lastCoachAiAdvice = message;
+  state.lastCoachMode = options.mode || state.lastCoachMode;
+  updateCoachAdviceButtons();
   coach.classList.remove('hidden');
+}
+
+function setCoachStatus(status) {
+  const coach = $('ai-coach');
+  const statusEl = $('coach-status');
+  if (!coach || !statusEl) return;
+  statusEl.textContent = toPlainAscii(status);
+  coach.classList.remove('hidden');
+}
+
+function showStoredCoachAdvice(mode) {
+  if (mode === 'local' && state.lastCoachLocalAdvice) {
+    showCoachMessage('Forgey local advice', state.lastCoachLocalAdvice, { mode: 'local' });
+  } else if (mode === 'ai' && state.lastCoachAiAdvice) {
+    showCoachMessage('Forgey AI advice', state.lastCoachAiAdvice, { mode: 'ai' });
+  }
+}
+
+function updateCoachAdviceButtons() {
+  const actions = $('coach-actions');
+  const localBtn = $('coach-local-btn');
+  const aiBtn = $('coach-ai-btn');
+  if (!actions || !localBtn || !aiBtn) return;
+  const hasLocal = Boolean(state.lastCoachLocalAdvice);
+  const hasAi = Boolean(state.lastCoachAiAdvice);
+  actions.classList.toggle('hidden', !(hasLocal && hasAi));
+  localBtn.classList.toggle('active', state.lastCoachMode === 'local');
+  aiBtn.classList.toggle('active', state.lastCoachMode === 'ai');
 }
 
 function formatCoachMessage(message) {
