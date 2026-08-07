@@ -1625,7 +1625,7 @@ function describeAcceptedMove(fen, accepted) {
   if (type === 'r') {
     return `it puts a rook on a more useful file, where it can support a center break or pressure an open line.${captureText}${checkText}`;
   }
-  return `it improves your most useful piece or pawn for the position and gives the rest of your setup a clearer direction.${captureText}${checkText}`;
+  return `it improves your most useful piece or pawn for the position and gives the rest of your setup a more concrete job.${captureText}${checkText}`;
 }
 
 function describeMistakeGroup(fen, mistakes, accepted) {
@@ -1743,7 +1743,7 @@ async function requestCoachExplanation(payload) {
   const messages = [
     {
       role: 'system',
-      content: 'You are Forgey, a friendly chess opening coach for club players. You will receive a local baseline explanation and move context. Give only a short coach tip about why the accepted move is a better practical chess move than the rejected attempts. Prefer the local baseline if it is good; improve it only with concrete chess ideas. Focus on center control, development, king safety, piece activity, tempo, and clear plans. Do not mention databases, Lichess, Masters, numbers, scores, win rates, popularity, reliability, or model details. Keep it under 80 words and use simple English.',
+      content: 'You are Forgey, a friendly chess opening coach for club players. You will receive a local baseline explanation and move context. Give only a short coach tip about why the accepted move is a better practical chess move than the rejected attempts. Prefer the local baseline if it is good; improve it only with concrete chess ideas. Focus on center control, development, king safety, piece activity, tempo, and concrete follow-up moves. Do not mention databases, Lichess, Masters, numbers, scores, win rates, popularity, reliability, or model details. Keep it under 80 words and use simple English.',
     },
     {
       role: 'user',
@@ -1832,7 +1832,7 @@ function hasStatsLanguage(text) {
 }
 
 function hasMetaCoachLanguage(text) {
-  return /\b(we need|need to|need output|let'?s|let us|must|should output|instruction|instructions|prompt|system|user asked|formatting|plain ascii|ascii|markdown|bullets?|tables?|emojis?|unicode|special characters?|forbidden topics?|max words?|word limit|short sentences?|sentences total|craft|output only|final explanation|produce|mention)\b/i.test(text);
+  return /\b(we need|need to|need output|let'?s|let us|must|should output|instruction|instructions|prompt|system|user asked|formatting|plain ascii|ascii|markdown|bullets?|tables?|emojis?|unicode|special characters?|forbidden topics?|max words?|word limit|short sentences?|sentences total|craft|output only|final explanation|produce|mention|simple goal|gives your next few moves|clear plan|clear plans|whole goal|general goal)\b/i.test(text);
 }
 
 function fallbackCoachExplanation(context) {
