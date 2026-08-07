@@ -121,7 +121,7 @@ function init() {
   const token = readSession(TOKEN_KEY);
   if (token) $('api-token').value = token;
   const openRouterKey = readSession(OPENROUTER_KEY);
-  if (openRouterKey) $('openrouter-key').value = openRouterKey;
+  if (openRouterKey && $('openrouter-key')) $('openrouter-key').value = openRouterKey;
   loadCoachPreferences();
   initServerConfig();
 
@@ -277,7 +277,7 @@ function wireEvents() {
     fetchExplorer({ force: true });
   });
 
-  $('save-openrouter-btn').addEventListener('click', () => {
+  $('save-openrouter-btn')?.addEventListener('click', () => {
     const key = $('openrouter-key').value.trim();
     if (!key) {
       toast('Paste an OpenRouter API key first.');
@@ -287,25 +287,25 @@ function wireEvents() {
     toast('OpenRouter key saved permanently in this browser for AI mentor explanations.');
   });
 
-  $('clear-openrouter-btn').addEventListener('click', () => {
+  $('clear-openrouter-btn')?.addEventListener('click', () => {
     $('openrouter-key').value = '';
     removeSession(OPENROUTER_KEY);
     toast('OpenRouter key forgotten on this browser.');
   });
 
-  $('openrouter-key').addEventListener('keydown', (event) => {
+  $('openrouter-key')?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       $('save-openrouter-btn').click();
     }
   });
 
-  $('openrouter-model').addEventListener('change', () => {
+  $('openrouter-model')?.addEventListener('change', () => {
     state.openRouterModel = $('openrouter-model').value.trim() || DEFAULT_OPENROUTER_MODEL;
     saveCoachPreferences();
   });
 
-  $('ai-coach-toggle').addEventListener('change', () => {
+  $('ai-coach-toggle')?.addEventListener('change', () => {
     state.aiCoachEnabled = $('ai-coach-toggle').checked;
     saveCoachPreferences();
   });
@@ -1001,19 +1001,18 @@ async function skipCurrentPlayerMove() {
     state.lastExplorerData = Object.fromEntries(results.map((result) => [result.source, result.data]));
     renderOpeningFromResults(results);
 
-    const plan = choosePlayerCandidatePlan(
-      buildCombinedMoveList(results, state.playerColor),
-      currentDepth(),
+    const entries = buildCombinedMoveList(results, state.playerColor);
+    const eligibleForSkip = sortByCombinedGames(
+      entries.filter((entry) => getMoveQualification(entry, state.playerColor).qualifiesAt(currentDepth())),
       state.playerColor,
-      state.movePolicy,
     );
 
-    if (!plan.candidates.length) {
+    if (!eligibleForSkip.length) {
       completeOpeningAtDepth(currentDepth(), 'no-player-candidates');
       return;
     }
 
-    const entry = plan.candidates[0];
+    const entry = eligibleForSkip[0];
     const move = entry.legalMove;
     const made = state.game.move({ from: move.from, to: move.to, promotion: move.promotion });
     if (!made) {
@@ -1059,16 +1058,10 @@ function queueCoachForSkippedMove(fen, move, validationData) {
     color: state.playerColor,
     skipped: true,
   }];
-  const localAdvice = generateLocalCoachAdvice({ fen, accepted, mistakes }); // kept for future/local-mode work, not currently shown
+  const localAdvice = generateLocalCoachAdvice({ fen, accepted, mistakes });
   state.lastCoachLocalAdvice = localAdvice;
   state.lastCoachAiAdvice = '';
-  const key = $('openrouter-key')?.value.trim() || readSession(OPENROUTER_KEY);
-  if (!state.aiCoachEnabled || !key) {
-    showCoachMessage('Forgey needs OpenRouter', `I played ${accepted.san} for you. Add an OpenRouter key if you want Forgey to explain skipped moves.`);
-    return;
-  }
-  showCoachMessage('Forgey is thinking', `I played ${accepted.san}. Asking Gemma to explain the move...`);
-  startCoachAiRetries({ fen, accepted, mistakes, validationData, key, localAdvice });
+  showCoachMessage('Forgey local advice', localAdvice, { mode: 'local' });
 }
 
 function renderPlayerMoveChooser(results, fen) {
@@ -1164,6 +1157,8 @@ function buildMoveStats(move, colorForScores) {
   const total = moveTotal(move);
   const whiteScore = total ? ((move.white || 0) + 0.5 * (move.draws || 0)) / total * 100 : 0;
   const blackScore = total ? ((move.black || 0) + 0.5 * (move.draws || 0)) / total * 100 : 0;
+  const whiteWinrate = total ? (move.white || 0) / total * 100 : 0;
+  const blackWinrate = total ? (move.black || 0) / total * 100 : 0;
   return {
     total,
     white: move.white || 0,
@@ -1171,7 +1166,10 @@ function buildMoveStats(move, colorForScores) {
     black: move.black || 0,
     whiteScore,
     blackScore,
+    whiteWinrate,
+    blackWinrate,
     colorScore: colorForScores === 'w' ? whiteScore : blackScore,
+    colorWinrate: colorForScores === 'w' ? whiteWinrate : blackWinrate,
     averageOpponentRating: move.averageOpponentRating || move.averageRating || null,
   };
 }
@@ -1187,9 +1185,9 @@ function choosePlayerCandidatePlan(entries, minDepth, color, policy) {
     mode: candidates.length ? 'database' : 'none',
     policy: normalizedPolicy,
     title: normalizedPolicy === 'mostGames'
-      ? `Most combined games: ${formatDepth(minDepth)}+ total games and best score >= 50%`
-      : `Best score first: ${formatDepth(minDepth)}+ total games and best score >= 50%`,
-    description: 'Every candidate uses Masters games plus Lichess 2500+ games for depth. The score used is whichever source gives your color the higher score.',
+      ? `Most combined games: ${formatDepth(minDepth)}+ total games and best score or winrate >= 50%`
+      : `Best score first: ${formatDepth(minDepth)}+ total games and best score or winrate >= 50%`,
+    description: 'Every candidate uses Masters games plus Lichess 2500+ games for depth. A move qualifies if either source has score >=50% or pure winrate >=50%; depth is always combined games.',
     candidates,
     activeSource: 'combined',
   };
@@ -1202,16 +1200,20 @@ function getMoveQualification(entry, color) {
   const lichessGames = lichess?.total || 0;
   const mastersScore = masters ? scoreForColorStats(masters, color) : null;
   const lichessScore = lichess ? scoreForColorStats(lichess, color) : null;
+  const mastersWinrate = masters ? winrateForColorStats(masters, color) : null;
+  const lichessWinrate = lichess ? winrateForColorStats(lichess, color) : null;
   const qualificationGames = mastersGames + lichessGames;
-  const bestScore = Math.max(
-    mastersScore ?? -Infinity,
-    lichessScore ?? -Infinity,
-  );
-  const bestSource = bestScore === -Infinity
+  const bestScore = Math.max(mastersScore ?? -Infinity, lichessScore ?? -Infinity);
+  const bestWinrate = Math.max(mastersWinrate ?? -Infinity, lichessWinrate ?? -Infinity);
+  const bestMetric = Math.max(bestScore, bestWinrate);
+  const bestSource = bestMetric === -Infinity
     ? null
-    : mastersScore !== null && mastersScore >= (lichessScore ?? -Infinity)
-      ? 'masters'
-      : 'lichess';
+    : [
+        ['masters score', mastersScore],
+        ['lichess score', lichessScore],
+        ['masters winrate', mastersWinrate],
+        ['lichess winrate', lichessWinrate],
+      ].sort((a, b) => (b[1] ?? -Infinity) - (a[1] ?? -Infinity))[0][0];
 
   return {
     masters,
@@ -1220,12 +1222,18 @@ function getMoveQualification(entry, color) {
     lichessGames,
     mastersScore,
     lichessScore,
+    mastersWinrate,
+    lichessWinrate,
     mastersPositive: mastersScore !== null && mastersScore >= 50,
     lichessPositive: lichessScore !== null && lichessScore >= 50,
+    mastersWinratePositive: mastersWinrate !== null && mastersWinrate >= 50,
+    lichessWinratePositive: lichessWinrate !== null && lichessWinrate >= 50,
     bestScore,
+    bestWinrate,
+    bestMetric,
     bestSource,
     qualificationGames,
-    qualifiesAt: (minDepth) => qualificationGames >= minDepth && bestScore >= 50,
+    qualifiesAt: (minDepth) => qualificationGames >= minDepth && bestMetric >= 50,
   };
 }
 
@@ -1235,6 +1243,10 @@ function sortByCombinedGames(entries, color) {
 
 function scoreForColorStats(stats, color) {
   return color === 'w' ? stats.whiteScore : stats.blackScore;
+}
+
+function winrateForColorStats(stats, color) {
+  return color === 'w' ? stats.whiteWinrate : stats.blackWinrate;
 }
 
 function sortBySourceScore(entries, source, color) {
@@ -1250,7 +1262,7 @@ function sortCombinedByBestScore(entries, color) {
 }
 
 function bestEligibleScore(entry, color) {
-  const score = getMoveQualification(entry, color).bestScore;
+  const score = getMoveQualification(entry, color).bestMetric;
   return Number.isFinite(score) ? score : -Infinity;
 }
 
@@ -1260,12 +1272,14 @@ function bestGames(entry, color = state.playerColor) {
 
 
 function formatQualificationScore(qualification) {
-  return Number.isFinite(qualification.bestScore) ? `${qualification.bestScore.toFixed(1)}%` : 'n/a';
+  return Number.isFinite(qualification.bestMetric) ? `${qualification.bestMetric.toFixed(1)}%` : 'n/a';
 }
 
 function formatQualificationSource(qualification) {
-  if (qualification.bestSource === 'masters') return 'Masters';
-  if (qualification.bestSource === 'lichess') return 'Lichess';
+  if (qualification.bestSource === 'masters score') return 'Masters score';
+  if (qualification.bestSource === 'lichess score') return 'Lichess score';
+  if (qualification.bestSource === 'masters winrate') return 'Masters winrate';
+  if (qualification.bestSource === 'lichess winrate') return 'Lichess winrate';
   return 'neither source';
 }
 
@@ -1282,7 +1296,7 @@ function renderDatabaseMovePlan(plan, minDepth, sourceSummary) {
   dot.style.animation = 'none';
   summary.appendChild(dot);
   const text = document.createElement('span');
-  text.textContent = `${sourceSummary}. Showing ${plan.candidates.length} line move${plan.candidates.length === 1 ? '' : 's'} for ${colorName(state.playerColor)} at >=${formatDepth(minDepth)} combined games and best database score >=50%.`;
+  text.textContent = `${sourceSummary}. Showing ${plan.candidates.length} line move${plan.candidates.length === 1 ? '' : 's'} for ${colorName(state.playerColor)} at >=${formatDepth(minDepth)} combined games and best score/winrate >=50%.`;
   summary.appendChild(text);
 
   const container = $('moves-table');
@@ -1314,7 +1328,7 @@ function createDatabaseMoveCard(entry, activeSource, displayColor = state.player
   const meta = document.createElement('div');
   meta.className = 'move-meta';
   const qualification = getMoveQualification(entry, displayColor);
-  meta.textContent = `Qualified by combined games - ${formatNumber(qualification.qualificationGames)} total games - best score ${formatQualificationScore(qualification)} from ${formatQualificationSource(qualification)}.`;
+  meta.textContent = `Qualified by combined games - ${formatNumber(qualification.qualificationGames)} total games - best score/winrate ${formatQualificationScore(qualification)} from ${formatQualificationSource(qualification)}.`;
 
   main.append(button, meta);
 
@@ -1335,11 +1349,12 @@ function createSourceStat(label, stats, color) {
     return box;
   }
   const score = scoreForColorStats(stats, color);
-  const positive = score >= 50 ? 'eligible score source' : 'games-only support';
+  const winrate = winrateForColorStats(stats, color);
+  const positive = score >= 50 || winrate >= 50 ? 'eligible result source' : 'games-only support';
   box.innerHTML = `
     <strong>${label}</strong>
     <span>${formatNumber(stats.total)} games - ${positive}</span>
-    <span>${colorName(color)} score ${score.toFixed(1)}%</span>
+    <span>${colorName(color)} score ${score.toFixed(1)}% - win ${winrate.toFixed(1)}%</span>
     <span>W ${stats.whiteScore.toFixed(0)}% / B ${stats.blackScore.toFixed(0)}%</span>
   `;
   return box;
@@ -1507,20 +1522,13 @@ function queueCoachForAcceptedMove(fen, move, validationData) {
     color: state.playerColor,
     stats: summarizeMoveForCoach(toUci(move), state.playerColor, validationData),
   };
-  const localAdvice = generateLocalCoachAdvice({ fen, accepted, mistakes }); // kept for future/local-mode work, not currently shown
+  const localAdvice = generateLocalCoachAdvice({ fen, accepted, mistakes });
   state.lastCoachLocalAdvice = localAdvice;
   state.lastCoachAiAdvice = '';
 
-  const key = $('openrouter-key')?.value.trim() || readSession(OPENROUTER_KEY);
-  if (!state.aiCoachEnabled || !key) {
-    showCoachMessage('Forgey needs OpenRouter', 'Add an OpenRouter key to get an explanation for this correction. Local advice is disabled for now.');
-    return;
-  }
-
   state.pendingMistakesByFen.delete(fen);
   saveCurrentGameState();
-  showCoachMessage('Forgey is thinking', 'Asking Gemma for a short explanation...');
-  startCoachAiRetries({ fen, accepted, mistakes, validationData, key, localAdvice });
+  showCoachMessage('Forgey local advice', localAdvice, { mode: 'local' });
 }
 
 
@@ -1622,6 +1630,8 @@ function summarizeMoveForCoach(uci, color, dataBySource = {}) {
     qualificationGames: q.qualificationGames,
     qualifies500: q.qualifiesAt(500),
     bestScore: Number((Number.isFinite(q.bestScore) ? q.bestScore : 0).toFixed(1)),
+    bestWinrate: Number((Number.isFinite(q.bestWinrate) ? q.bestWinrate : 0).toFixed(1)),
+    bestMetric: Number((Number.isFinite(q.bestMetric) ? q.bestMetric : 0).toFixed(1)),
     bestSource: q.bestSource,
     masters: q.masters ? simplifySourceStats(q.masters, color) : null,
     lichess: q.lichess ? simplifySourceStats(q.lichess, color) : null,
@@ -1632,6 +1642,7 @@ function simplifySourceStats(stats, color) {
   return {
     games: stats.total,
     colorScore: Number(scoreForColorStats(stats, color).toFixed(1)),
+    colorWinrate: Number(winrateForColorStats(stats, color).toFixed(1)),
     whiteScore: Number(stats.whiteScore.toFixed(1)),
     blackScore: Number(stats.blackScore.toFixed(1)),
     whiteWins: stats.white,

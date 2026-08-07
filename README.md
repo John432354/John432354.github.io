@@ -16,7 +16,7 @@ Features:
 - Move list, captured pieces, board flip, themes, and responsive layout
 - Lichess Opening Explorer integration for most-played human moves in the current position
 - Hardcoded explorer sources: Masters database plus Lichess 2500+ rapid/classical/correspondence games
-- Player move rules: Masters games plus Lichess games must clear the depth threshold, and the higher source score for your color must be at least 50%
+- Player move rules: Masters games plus Lichess games must clear the depth threshold, and at least one source must have score or winrate of 50% or better for your color
 - Depth slider values exactly: 100k, 50k, 10k, 5k, 1k, 500
 - Enemy reply rule: most popular uncompleted database response from the fixed Masters/Lichess sources, game count and score ignored
 - Opening completion when your side has no qualifying database move or the enemy has no uncompleted database response
@@ -36,25 +36,25 @@ After each legal move, the app reads the current FEN and makes two fixed opening
    - `speeds=rapid,classical,correspondence`
    - fixed move/reference-game limits
 
-Your move list is built from both databases and keeps Master and Lichess color scores separate. Qualification now uses a simple combined-depth, best-score rule:
+Your move list is built from both databases and keeps Master and Lichess results separate. Qualification now uses a combined-depth plus any-positive-result rule:
 
 - depth is always Masters games plus Lichess 2500+ games for that move;
-- score is whichever source gives your color the higher score;
-- the move qualifies when combined games clear the selected depth and the best score is at least 50%.
+- the move qualifies when combined games clear the selected depth; and
+- at least one of these is true for your color: Masters score is at least 50%, Lichess score is at least 50%, Masters pure winrate is at least 50%, or Lichess pure winrate is at least 50%.
 
-The default ordering sorts by the best score from either source. You can also sort by most combined games.
+The default ordering sorts by the best score or winrate from either source. You can also sort by most combined games.
 
-If your attempted move fails the 500+ combined-games / best score at least 50% rule, the app shows “Hmm, try making a better move!”, adds a mistake, and automatically undoes it. If your side has no qualifying database move, the app considers the opening learned. Enemy moves choose the most popular uncompleted database response from the fixed Masters/Lichess sources, ignoring game count and score. If no such enemy database response exists, the app congratulates you, and zero-mistake lines are saved so the enemy will skip them at that depth.
+If your attempted move fails the 500+ combined-games / at least one score or winrate at 50% rule, the app shows “Hmm, try making a better move!”, adds a mistake, and automatically undoes it. If your side has no qualifying database move, the app considers the opening learned. Enemy moves choose the most popular uncompleted database response from the fixed Masters/Lichess sources, ignoring game count and score. If no such enemy database response exists, the app congratulates you, and zero-mistake lines are saved so the enemy will skip them at that depth.
 
 
 ## Optional Forgey AI mentor
 
 LineForge can explain a corrected move after you make mistakes in the same position. Flow:
 
-1. You try one or more moves that fail the 500+ combined-games / best score at least 50% rule.
+1. You try one or more moves that fail the 500+ combined-games / at least one score or winrate at 50% rule.
 2. LineForge rejects and undoes those attempts, tracking their SAN/UCI and database stats.
 3. You then make an accepted move from that same position.
-4. If an OpenRouter key is configured, Forgey keeps trying Gemma in the background until it gets a usable explanation. A local-advice framework remains in the codebase for future use, but it is not exposed in the current UI.
+4. Forgey currently gives local advice only. The OpenRouter framework remains in the codebase for future use, but online AI advice is disabled in the current UI.
 
 The OpenRouter key is saved in browser `localStorage` so it persists after closing the site. The default model is:
 

@@ -168,11 +168,11 @@
           <label class="field">
             <span>Player move ordering</span>
             <select id="move-policy">
-              <option value="bestScore">Best score first</option>
+              <option value="bestScore">Best score/winrate first</option>
               <option value="mostGames">Most combined games first</option>
             </select>
           </label>
-          <p class="help-text">Your moves use combined games from Masters plus Lichess 2500+ for the depth test. The score used is the higher score between Masters and Lichess. Enemy replies use the most popular uncompleted response regardless of game count or score.</p>
+          <p class="help-text">Your moves use combined games from Masters plus Lichess 2500+ for the depth test. A move qualifies if either source has score at least 50% or winrate at least 50%. Enemy replies use the most popular uncompleted response regardless of game count or score.</p>
         </section>
 
         <details class="settings-details" open>
@@ -197,26 +197,10 @@
         </details>
 
         <details class="settings-details ai-settings" open>
-          <summary>Forgey AI mentor</summary>
+          <summary>Forgey local mentor</summary>
           <div class="api-notes">
-            <p>Optional: connect OpenRouter and LineForge will feed the AI your rejected attempts plus the first accepted move from that same position. Forgey explains why the accepted move fit the line better.</p>
-            <p>The default model is Google Gemma 4 26B free on OpenRouter, with automatic fallbacks to other current free/ultracheap models if it becomes unavailable.</p>
-          </div>
-          <label class="toggle-row">
-            <input id="ai-coach-toggle" type="checkbox" checked />
-            <span>Enable AI explanations after corrected mistakes</span>
-          </label>
-          <label class="field token-field">
-            <span>OpenRouter API key <em>(optional, saved in this browser)</em></span>
-            <input id="openrouter-key" type="password" placeholder="sk-or-v1-..." autocomplete="off" />
-          </label>
-          <label class="field">
-            <span>OpenRouter model</span>
-            <input id="openrouter-model" type="text" value="google/gemma-4-26b-a4b-it:free" autocomplete="off" />
-          </label>
-          <div class="button-grid two token-actions">
-            <button id="save-openrouter-btn" class="button small" type="button">Save AI key</button>
-            <button id="clear-openrouter-btn" class="button small subtle" type="button">Forget AI key</button>
+            <p>Forgey now gives local chess advice only. The OpenRouter framework remains in the codebase for later, but online AI advice is disabled in this mode.</p>
+            <p>Use Skip current move if you want Forgey to play the top eligible line move, add one mistake, and explain the practical idea locally.</p>
           </div>
         </details>
 
@@ -224,7 +208,7 @@
           <summary>How API move fetching works</summary>
           <div class="api-notes">
             <p>After each legal move, the app reads the current FEN and makes two fixed opening-data requests: Masters database, plus Lichess 2500+ rapid/classical/correspondence.</p>
-            <p>On your turn, a database move is usable when Masters games plus Lichess games clear the selected depth, and the higher of the two source scores is at least 50%. Master and Lichess scores stay separate on every row, but qualification always uses combined games and the best score.</p>
+            <p>On your turn, a database move is usable when Masters games plus Lichess games clear the selected depth, and at least one source has score or winrate of 50% or better. Master and Lichess results stay separate on every row, but depth always uses combined games.</p>
             <p>If your move fails the 500+ game / 50%+ score rule, it is rejected, counted as a mistake, and automatically undone. If no database move qualifies for your color, the opening is considered learned. On the enemy turn, the app plays the most popular uncompleted API database response, ignoring game count and score.</p>
           </div>
         </details>
@@ -273,11 +257,11 @@
         </section>
         <section class="onboarding-tile">
           <h3>5. Depth and score rule</h3>
-          <p>Your database moves must clear the selected depth using Masters games plus Lichess games. The score check uses whichever source gives your color the higher score, and that best score must be at least 50%. The depth slider values are exactly <code>100k, 50k, 10k, 5k, 1k, 500</code>.</p>
+          <p>Your database moves must clear the selected depth using Masters games plus Lichess games. A move is eligible if Masters score, Lichess score, Masters winrate, or Lichess winrate is at least 50%. The depth slider values are exactly <code>100k, 50k, 10k, 5k, 1k, 500</code>.</p>
         </section>
         <section class="onboarding-tile">
           <h3>6. Move ordering</h3>
-          <p>The default mode sorts by the best score from either source. You can also sort by the most combined games. Masters and Lichess scores stay visible separately.</p>
+          <p>The default mode sorts by the best score or winrate from either source. You can also sort by the most combined games. Masters and Lichess results stay visible separately.</p>
         </section>
         <section class="onboarding-tile">
           <h3>7. Completion</h3>
