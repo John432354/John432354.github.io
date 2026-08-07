@@ -81,6 +81,8 @@ const state = {
   openRouterModel: DEFAULT_OPENROUTER_MODEL,
   pendingMistakesByFen: new Map(),
   coachRequestId: 0,
+  activeCoachJobId: 0,
+  coachRetryTimer: null,
   lastCoachLocalAdvice: '',
   lastCoachAiAdvice: '',
   lastCoachMode: 'local',
@@ -198,6 +200,14 @@ function wireEvents() {
   $('download-pgn-modal-btn').addEventListener('click', downloadPgn);
   $('copy-pgn-btn').addEventListener('click', () => copyText(getPgn(), 'PGN copied'));
   $('copy-fen-btn').addEventListener('click', () => copyText(state.game.fen(), 'FEN copied'));
+  $('completion-close-btn').addEventListener('click', () => $('completion-dialog').close());
+  $('completion-copy-pgn-btn').addEventListener('click', () => copyText(getPgn(), 'PGN copied'));
+  $('completion-download-pgn-btn').addEventListener('click', downloadPgn);
+  $('completion-copy-fen-btn').addEventListener('click', () => copyText(state.game.fen(), 'FEN copied'));
+  $('completion-new-game-btn').addEventListener('click', () => {
+    $('completion-dialog').close();
+    safeShowModal($('setup-dialog'));
+  });
   $('undo-btn').addEventListener('click', undoMove);
   $('flip-btn').addEventListener('click', flipBoard);
   $('resign-btn').addEventListener('click', resignSideToMove);
@@ -384,6 +394,9 @@ function startGame(config) {
   state.lastExplorerData = null;
 
   if (state.enemyTimer) clearTimeout(state.enemyTimer);
+  if (state.coachRetryTimer) clearTimeout(state.coachRetryTimer);
+  state.activeCoachJobId = 0;
+  state.coachRetryTimer = null;
   if (state.explorerAbort) state.explorerAbort.abort();
   state.explorerCache.clear();
 
@@ -1423,12 +1436,39 @@ function queueCoachForAcceptedMove(fen, move, validationData) {
 
   state.pendingMistakesByFen.delete(fen);
   saveCurrentGameState();
-  requestCoachExplanation({ fen, accepted, mistakes, validationData, key, localAdvice }).catch((error) => {
-    showCoachMessage('Forgey local advice', localAdvice, { mode: 'local' });
-    toast(`Forgey AI was unavailable, so local advice stayed active: ${error.message || error}`);
+  startCoachAiRetries({ fen, accepted, mistakes, validationData, key, localAdvice });
+}
+
+
+
+function startCoachAiRetries(payload) {
+  if (state.coachRetryTimer) clearTimeout(state.coachRetryTimer);
+  const jobId = ++state.coachRequestId;
+  state.activeCoachJobId = jobId;
+  state.coachRetryTimer = null;
+  attemptCoachAiRetry({ ...payload, jobId, attempt: 0 });
+}
+
+function attemptCoachAiRetry(payload) {
+  if (!isCoachRetryCurrent(payload)) return;
+  requestCoachExplanation(payload).catch((error) => {
+    if (!isCoachRetryCurrent(payload)) return;
+    const delay = Math.min(60000, 12000 + payload.attempt * 8000);
+    setCoachStatus(`Forgey is still trying Gemma in the background. Local advice is active.`);
+    state.coachRetryTimer = setTimeout(() => {
+      attemptCoachAiRetry({ ...payload, attempt: payload.attempt + 1 });
+    }, delay);
   });
 }
 
+function isCoachRetryCurrent(payload) {
+  return Boolean(
+    payload
+    && payload.jobId === state.activeCoachJobId
+    && state.lastCoachLocalAdvice === payload.localAdvice
+    && !state.lastCoachAiAdvice
+  );
+}
 
 function generateLocalCoachAdvice({ fen, accepted, mistakes }) {
   const acceptedIdea = describeAcceptedMove(fen, accepted);
@@ -1551,7 +1591,7 @@ function summarizeTopMovesForCoach(dataBySource = {}, color) {
 }
 
 async function requestCoachExplanation(payload) {
-  const id = ++state.coachRequestId;
+  const id = payload.jobId || ++state.coachRequestId;
   let requestedModel = $('openrouter-model')?.value.trim() || state.openRouterModel || DEFAULT_OPENROUTER_MODEL;
   if (DEPRECATED_OPENROUTER_MODELS.has(requestedModel)) requestedModel = DEFAULT_OPENROUTER_MODEL;
   state.openRouterModel = requestedModel;
@@ -1583,6 +1623,8 @@ async function requestCoachExplanation(payload) {
       state.openRouterModel = model;
       if ($('openrouter-model')) $('openrouter-model').value = model;
       saveCoachPreferences();
+      if (state.coachRetryTimer) clearTimeout(state.coachRetryTimer);
+      state.coachRetryTimer = null;
       showCoachMessage('Forgey AI advice', cleanCoachExplanation(explanation, context, payload.localAdvice), { mode: 'ai' });
       return;
     } catch (error) {
@@ -1787,8 +1829,21 @@ function completeOpeningAtDepth(depth, reason) {
   saveCurrentGameState();
   toast(message);
   renderAll();
+  showCompletionDialog({
+    title: learned ? 'Opening learned' : 'Branch complete',
+    message,
+    detail: `${reasonText}${state.mistakes === 0 && learned ? ' This line was saved and will be skipped by the enemy at this depth.' : ' This did not save a new learned line because learning a line requires reaching no player candidates with zero mistakes.'}`,
+  });
 }
 
+
+
+function showCompletionDialog({ title, message, detail }) {
+  if ($('completion-title')) $('completion-title').textContent = title || 'Line complete';
+  if ($('completion-message')) $('completion-message').textContent = message || 'Line complete.';
+  if ($('completion-detail')) $('completion-detail').textContent = detail || '';
+  safeShowModal($('completion-dialog'));
+}
 
 function completionReasonText(reason) {
   if (reason === 'no-player-candidates') return 'No qualifying database move exists for your side at this depth.';
@@ -1850,6 +1905,11 @@ function renderColorDepthCompletion(message, fullyLearned) {
   $('games-list').innerHTML = '';
   toast(message);
   renderAll();
+  showCompletionDialog({
+    title: fullyLearned ? 'Color complete' : 'Depth complete',
+    message,
+    detail: fullyLearned ? 'That color is complete at every depth. Start a run with the other color.' : 'LineForge lowered the max game depth for this color. Start a new run at the next depth.',
+  });
 }
 
 function forceAnotherColor(completedColor) {

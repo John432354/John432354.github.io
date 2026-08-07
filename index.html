@@ -29,7 +29,7 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true"><img class="brand-logo" src="./assets/forgey.svg" alt="" /></div>
       <div>
-        <p class="eyebrow">Forge openings. Retire lines.</p>
+        <p class="eyebrow">Build your opening repertoire with Forgey!</p>
         <h1>LineForge</h1>
       </div>
     </div>
@@ -358,6 +358,28 @@
         <button class="button primary" value="start" type="submit">Start game</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="completion-dialog" class="modal completion-dialog">
+    <div class="modal-card completion-modal-card">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Line complete</p>
+          <h2 id="completion-title">Opening learned</h2>
+        </div>
+        <button id="completion-close-btn" class="icon-button" type="button" aria-label="Close completion panel">×</button>
+      </div>
+      <div class="completion-hero-panel">
+        <strong id="completion-message">Congrats, youve learned this opening!</strong>
+        <p id="completion-detail">This line is saved in your browser.</p>
+      </div>
+      <div class="completion-export-grid">
+        <button id="completion-copy-pgn-btn" class="button" type="button">Copy PGN</button>
+        <button id="completion-download-pgn-btn" class="button" type="button">Download PGN</button>
+        <button id="completion-copy-fen-btn" class="button" type="button">Copy FEN</button>
+        <button id="completion-new-game-btn" class="button primary" type="button">New game setup</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="pgn-dialog" class="modal">
