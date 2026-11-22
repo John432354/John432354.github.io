@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Sonora — audio-only music",
+  "name": "Sonora",
   "short_name": "Sonora",
-  "description": "A YouTube Music client in a single HTML file that plays the audio release and never the music video.",
+  "description": "A YouTube Music client — clean audio, single file.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
