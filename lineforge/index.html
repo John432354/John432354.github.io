@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LineForge</title>
+  <meta name="description" content="LineForge is a browser opening-lines trainer for forging, completing, and retiring repertoire branches with Lichess/Masters database rules." />
+  <link rel="icon" type="image/svg+xml" href="./assets/forgey.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <aside id="ai-coach" class="ai-coach hidden" aria-live="polite" aria-label="Forgey AI coach">
+    <img class="coach-character" src="./assets/forgey.svg" alt="Forgey, the LineForge mascot" />
+    <div class="coach-bubble">
+      <button id="coach-close-btn" class="coach-close" type="button" aria-label="Close coach message">×</button>
+      <div class="coach-title">Forgey</div>
+      <div id="coach-status" class="coach-status">Ready</div>
+      <div id="coach-message" class="coach-message">Make a few attempts, then I will explain why the line move works.</div>
+
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><img class="brand-logo" src="./assets/forgey.svg" alt="" /></div>
+      <div>
+        <p class="eyebrow">Build your opening repertoire with Forgey!</p>
+        <h1>LineForge</h1>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="connection-pill" class="pill soft">Explorer: idle</span>
+      <button id="guide-btn" class="button">Guide</button>
+      <button id="new-game-btn" class="button primary">New game</button>
+      <button id="export-pgn-btn" class="button">Export PGN</button>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <aside class="panel left-panel" aria-label="Game controls">
+      <section class="card compact-card">
+        <div class="section-title">
+          <span>Game</span>
+          <span id="playing-as-pill" class="pill">White</span>
+        </div>
+        <div class="status-stack">
+          <div>
+            <small>Turn</small>
+            <strong id="turn-status">White to move</strong>
+          </div>
+          <div>
+            <small>Status</small>
+            <strong id="game-status">Ready</strong>
+          </div>
+          <div>
+            <small>Mistakes</small>
+            <strong id="mistake-total">0</strong>
+          </div>
+          <div>
+            <small>Opening</small>
+            <strong id="opening-name">Starting position</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <span>Controls</span>
+        </div>
+        <div class="button-grid two">
+          <button id="undo-btn" class="button">Undo</button>
+          <button id="flip-btn" class="button">Flip board</button>
+          <button id="copy-fen-btn" class="button">Copy FEN</button>
+          <button id="download-pgn-btn" class="button">Download PGN</button>
+          <button id="skip-move-btn" class="button subtle">Skip current move</button>
+          <button id="resign-btn" class="button danger subtle">Resign side to move</button>
+          <button id="draw-btn" class="button subtle">Declare draw</button>
+        </div>
+        <label class="field inline-field">
+          <span>Board theme</span>
+          <select id="theme-select">
+            <option value="walnut">Walnut</option>
+            <option value="emerald">Emerald</option>
+            <option value="midnight">Midnight</option>
+            <option value="mono">Mono</option>
+          </select>
+        </label>
+        <label class="toggle-row">
+          <input id="sound-toggle" type="checkbox" checked />
+          <span>Subtle move sounds</span>
+        </label>
+      </section>
+
+      <section class="card move-card">
+        <div class="section-title">
+          <span>Move record</span>
+          <span id="move-count" class="muted">0 plies</span>
+        </div>
+        <div class="captures" aria-label="Captured pieces">
+          <div><small>White captured</small><span id="white-captures" class="capture-line">—</span></div>
+          <div><small>Black captured</small><span id="black-captures" class="capture-line">—</span></div>
+        </div>
+        <div id="move-list" class="move-list" aria-label="Move list"></div>
+      </section>
+    </aside>
+
+    <section class="board-stage" aria-label="Chess board area">
+      <div class="player-strip" id="top-player-strip">
+        <div>
+          <span id="top-player-color" class="mini-color"></span>
+          <strong id="top-player-name">Black</strong>
+        </div>
+        <span id="top-player-meta" class="muted">Training side</span>
+      </div>
+
+      <div class="board-frame">
+        <div id="board" class="chess-board" role="grid" aria-label="Interactive chess board"></div>
+      </div>
+
+      <div class="player-strip" id="bottom-player-strip">
+        <div>
+          <span id="bottom-player-color" class="mini-color"></span>
+          <strong id="bottom-player-name">White</strong>
+        </div>
+        <span id="bottom-player-meta" class="muted">Training side</span>
+      </div>
+
+      <div class="fen-strip">
+        <span>FEN</span>
+        <code id="fen-output"></code>
+      </div>
+    </section>
+
+    <aside class="panel right-panel" aria-label="Opening explorer">
+      <section class="card explorer-card">
+        <div class="section-title">
+          <span>Opening explorer</span>
+          <button id="refresh-explorer-btn" class="button small">Refresh</button>
+        </div>
+
+        <div class="fixed-source-banner">
+          <strong>LineForge database rails</strong>
+          <span>Learning Openings mode is active. LineForge gives you only database-backed line moves while they clear the depth and score rule. If your side has no qualifying move, that branch is considered forged.</span>
+        </div>
+
+        <div class="fixed-source-list" aria-label="Fixed explorer sources">
+          <span class="source-chip">Masters database</span>
+          <span class="source-chip">Lichess 2500+</span>
+          <span class="source-chip">Rapid</span>
+          <span class="source-chip">Classical</span>
+          <span class="source-chip">Correspondence</span>
+        </div>
+
+        <section class="depth-control-card" aria-label="Move qualification controls">
+          <div class="section-title">
+            <span>Move qualification</span>
+            <span class="pill">Your depth ≥ <strong id="depth-label">1k</strong></span>
+          </div>
+          <label class="field depth-field">
+            <span>Your database move minimum games</span>
+            <input id="depth-slider" type="range" min="0" max="5" step="1" value="4" aria-label="Database move minimum games" />
+          </label>
+          <div class="depth-scale" aria-hidden="true">
+            <span>100k</span><span>50k</span><span>10k</span><span>5k</span><span>1k</span><span>500</span>
+          </div>
+          <label class="field">
+            <span>Player move ordering</span>
+            <select id="move-policy">
+              <option value="bestScore">Best score/winrate first</option>
+              <option value="mostGames">Most combined games first</option>
+            </select>
+          </label>
+          <p class="help-text">Your moves use combined games from Masters plus Lichess 2500+ for the depth test. A move qualifies if either source has score at least 50% or winrate at least 50%. Enemy replies use the most popular uncompleted response regardless of game count or score.</p>
+        </section>
+
+        <details class="settings-details" open>
+          <summary>API access</summary>
+          <div class="api-notes">
+            <p>The app makes two fixed lookups after each move: <strong>Masters database</strong> and <strong>Lichess rated games from the 2500+ rating bucket at rapid, classical, and correspondence speeds</strong>.</p>
+            <p>The token/proxy controls below only affect how requests authenticate. They do not change which games are queried.</p>
+          </div>
+          <label class="field token-field">
+            <span>Lichess OAuth token <em>(optional)</em></span>
+            <input id="api-token" type="password" placeholder="Bearer token; saved in this browser" autocomplete="off" />
+          </label>
+          <div class="button-grid two token-actions">
+            <button id="save-token-btn" class="button small" type="button">Save token</button>
+            <button id="clear-token-btn" class="button small subtle" type="button">Forget token</button>
+          </div>
+          <label class="toggle-row">
+            <input id="proxy-toggle" type="checkbox" />
+            <span>Use same-origin proxy <code>/api/explorer</code></span>
+          </label>
+          <p class="help-text">On GitHub Pages/static hosting, paste a Lichess token into this browser's token field. <code>local-secrets.json</code> only works when running <code>npm start</code> or another backend proxy.</p>
+        </details>
+
+        <details class="settings-details ai-settings" open>
+          <summary>Forgey local mentor</summary>
+          <div class="api-notes">
+            <p>Forgey now gives local chess advice only. The OpenRouter framework remains in the codebase for later, but online AI advice is disabled in this mode.</p>
+            <p>Use Skip current move if you want Forgey to play the top eligible line move, add one mistake, and explain the practical idea locally.</p>
+          </div>
+        </details>
+
+        <details class="settings-details api-explainer">
+          <summary>How API move fetching works</summary>
+          <div class="api-notes">
+            <p>After each legal move, the app reads the current FEN and makes two fixed opening-data requests: Masters database, plus Lichess 2500+ rapid/classical/correspondence.</p>
+            <p>On your turn, a database move is usable when Masters games plus Lichess games clear the selected depth, and at least one source has score or winrate of 50% or better. Master and Lichess results stay separate on every row, but depth always uses combined games.</p>
+            <p>If your move fails the 500+ game / 50%+ score rule, it is rejected, counted as a mistake, and automatically undone. If no database move qualifies for your color, the opening is considered learned. On the enemy turn, the app plays the most popular uncompleted API database response, ignoring game count and score.</p>
+          </div>
+        </details>
+
+        <div id="explorer-summary" class="explorer-summary">
+          <span class="loader-dot"></span>
+          <span>Stats will appear after the first lookup.</span>
+        </div>
+        <div id="moves-table" class="moves-table"></div>
+        <div id="games-list" class="games-list"></div>
+      </section>
+    </aside>
+  </main>
+
+  <dialog id="onboarding-dialog" class="modal onboarding-modal">
+    <form class="modal-card onboarding-card" method="dialog">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Welcome to LineForge</p>
+          <h2>How LineForge works</h2>
+        </div>
+        <button id="onboarding-close-btn" class="icon-button" value="cancel" type="button" aria-label="Close onboarding guide">×</button>
+      </div>
+
+      <div class="onboarding-hero">
+        <strong>You control your assigned side; the enemy replies from database games.</strong>
+        <span>LineForge is an opening-line trainer: your move list is filtered by Masters/Lichess depth and color score. When the database rule runs out, the opening is considered learned.</span>
+      </div>
+
+      <div class="onboarding-grid">
+        <section class="onboarding-tile">
+          <h3>1. Board control</h3>
+          <p>Choose your assigned side in setup. On your turn, click or drag a legal move, or click a candidate move. The enemy side replies automatically from the database pool.</p>
+        </section>
+        <section class="onboarding-tile">
+          <h3>2. Player setup</h3>
+          <p>“Assign your name to White/Black/Random” chooses your training side, PGN headers, and default board orientation. The opposite side is the enemy database side.</p>
+        </section>
+        <section class="onboarding-tile emphasis">
+          <h3>3. API move fetching</h3>
+          <p>After every move, the app sends the current FEN to the Lichess Opening Explorer API twice: Masters database, and Lichess 2500+ rapid/classical/correspondence games.</p>
+        </section>
+        <section class="onboarding-tile">
+          <h3>4. Sources</h3>
+          <p>The sources are hardcoded: <strong>Masters database</strong> for OTB master games, plus <strong>Lichess 2500+</strong> rated games at rapid, classical, and correspondence speeds.</p>
+        </section>
+        <section class="onboarding-tile">
+          <h3>5. Depth and score rule</h3>
+          <p>Your database moves must clear the selected depth using Masters games plus Lichess games. A move is eligible if Masters score, Lichess score, Masters winrate, or Lichess winrate is at least 50%. The depth slider values are exactly <code>100k, 50k, 10k, 5k, 1k, 500</code>.</p>
+        </section>
+        <section class="onboarding-tile">
+          <h3>6. Move ordering</h3>
+          <p>The default mode sorts by the best score or winrate from either source. You can also sort by the most combined games. Masters and Lichess results stay visible separately.</p>
+        </section>
+        <section class="onboarding-tile">
+          <h3>7. Completion</h3>
+          <p>When your side has no qualifying database move, or the enemy has no uncompleted database response, the app congratulates you and completes the line. If you connect OpenRouter, Forgey explains why your corrected move beat your rejected attempts.</p>
+        </section>
+        <section class="onboarding-tile">
+          <h3>8. API access and tokens</h3>
+          <p>If the explorer returns 401, generate a Lichess OAuth token. On GitHub Pages, paste it into this browser's token field. With the included Node server, use <code>LICHESS_TOKEN</code> / <code>local-secrets.json</code> and the proxy enables automatically.</p>
+        </section>
+      </div>
+
+      <div class="onboarding-footer-note">
+        <strong>Privacy/security:</strong> API keys and progress are saved in this browser with localStorage. For public/shared devices, clear keys when done. For real deployment, use the included <code>/api/explorer</code> proxy pattern so tokens stay server-side.
+      </div>
+
+      <label class="toggle-row onboarding-toggle">
+        <input id="onboarding-startup-toggle" type="checkbox" checked />
+        <span>Show this guide when the site loads</span>
+      </label>
+
+      <div class="modal-actions">
+        <button id="onboarding-setup-btn" class="button" type="button">Open game setup</button>
+        <button id="onboarding-primary-btn" class="button primary" type="button">Start exploring</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="setup-dialog" class="modal">
+    <form id="setup-form" class="modal-card" method="dialog">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Game setup</p>
+          <h2>Start a new game</h2>
+        </div>
+        <button id="setup-close-btn" class="icon-button" value="cancel" type="button" aria-label="Close setup dialog">×</button>
+      </div>
+
+      <div class="form-grid">
+        <label class="field">
+          <span>Your name</span>
+          <input id="setup-player-name" type="text" value="You" />
+        </label>
+        <label class="field">
+          <span>Other side name</span>
+          <input id="setup-opponent-name" type="text" value="Other Side" />
+        </label>
+        <label class="field">
+          <span>Your training side</span>
+          <select id="setup-side">
+            <option value="white">White</option>
+            <option value="black">Black</option>
+            <option value="random">Random</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Orientation</span>
+          <select id="setup-orientation">
+            <option value="player">Follow assigned side</option>
+            <option value="white">White at bottom</option>
+            <option value="black">Black at bottom</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Starting FEN <em>(optional)</em></span>
+        <textarea id="setup-fen" rows="2" placeholder="Leave blank for the normal starting position"></textarea>
+      </label>
+
+      <div class="online-note">
+        <strong>Learning Openings mode:</strong> you control the assigned side. The enemy replies automatically with the most popular uncompleted Masters/Lichess database response, ignoring game count and score.
+      </div>
+
+      <div class="modal-actions">
+        <button id="setup-cancel-btn" class="button subtle" value="cancel" type="button">Cancel</button>
+        <button class="button primary" value="start" type="submit">Start game</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="completion-dialog" class="modal completion-dialog">
+    <div class="modal-card completion-modal-card">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Line complete</p>
+          <h2 id="completion-title">Opening learned</h2>
+        </div>
+        <button id="completion-close-btn" class="icon-button" type="button" aria-label="Close completion panel">×</button>
+      </div>
+      <div class="completion-hero-panel">
+        <strong id="completion-message">Congrats, youve learned this opening!</strong>
+        <p id="completion-detail">This line is saved in your browser.</p>
+      </div>
+      <div class="completion-export-grid">
+        <button id="completion-copy-pgn-btn" class="button" type="button">Copy PGN</button>
+        <button id="completion-download-pgn-btn" class="button" type="button">Download PGN</button>
+        <button id="completion-copy-fen-btn" class="button" type="button">Copy FEN</button>
+        <button id="completion-new-game-btn" class="button primary" type="button">New game setup</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="pgn-dialog" class="modal">
+    <form class="modal-card pgn-modal" method="dialog">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Export</p>
+          <h2>PGN</h2>
+        </div>
+        <button class="icon-button" value="cancel" aria-label="Close PGN dialog">×</button>
+      </div>
+      <textarea id="pgn-output" rows="15" readonly></textarea>
+      <div class="modal-actions">
+        <button id="copy-pgn-btn" class="button" type="button">Copy PGN</button>
+        <button id="download-pgn-modal-btn" class="button primary" type="button">Download .pgn</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="promotion-dialog" class="modal promotion-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Promotion</p>
+          <h2>Choose a piece</h2>
+        </div>
+      </div>
+      <div class="promotion-choices">
+        <button class="promotion-piece" data-promotion="q" aria-label="Promote to queen">♕</button>
+        <button class="promotion-piece" data-promotion="r" aria-label="Promote to rook">♖</button>
+        <button class="promotion-piece" data-promotion="b" aria-label="Promote to bishop">♗</button>
+        <button class="promotion-piece" data-promotion="n" aria-label="Promote to knight">♘</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
