@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Ping — browser connectivity check</title>
+<style>
+  :root{
+    --bg:#0b1020;
+    --panel:#141b33;
+    --panel-2:#1b2444;
+    --line:#2a3560;
+    --text:#e7ecff;
+    --muted:#93a0c8;
+    --ok:#2fd27a;
+    --bad:#ff5d6c;
+    --warn:#ffc34d;
+    --accent:#5b8cff;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 700px at 15% -10%, #1b2a54 0%, transparent 60%), var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;
+    padding:28px 18px 64px;
+  }
+  .wrap{max-width:840px;margin:0 auto}
+  header h1{
+    font-size:26px;letter-spacing:-.02em;margin:0 0 6px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .gdot{
+    width:22px;height:22px;border-radius:50%;
+    background:conic-gradient(from 0deg,#4285F4 0 25%,#34A853 0 50%,#FBBC05 0 75%,#EA4335 0 100%);
+    flex:0 0 auto;
+  }
+  .sub{margin:0 0 22px;color:var(--muted);font-size:14px;line-height:1.5}
+
+  .banner{
+    display:none;gap:10px;align-items:flex-start;
+    background:rgba(255,195,77,.1);border:1px solid rgba(255,195,77,.4);
+    color:#ffe1a3;border-radius:12px;padding:12px 14px;font-size:13.5px;line-height:1.5;margin-bottom:18px;
+  }
+  .banner.show{display:flex}
+
+  .status{
+    display:flex;align-items:center;gap:16px;
+    background:linear-gradient(180deg,var(--panel-2),var(--panel));
+    border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-bottom:16px;
+  }
+  .dot{
+    width:18px;height:18px;border-radius:50%;flex:0 0 auto;
+    background:#3a4370;box-shadow:0 0 0 6px rgba(58,67,112,.25);
+    transition:background .25s,box-shadow .25s;
+  }
+  .dot.busy{background:var(--accent);box-shadow:0 0 0 6px rgba(91,140,255,.22);animation:pulse 1s infinite}
+  .dot.ok{background:var(--ok);box-shadow:0 0 0 6px rgba(47,210,122,.2)}
+  .dot.bad{background:var(--bad);box-shadow:0 0 0 6px rgba(255,93,108,.2)}
+  @keyframes pulse{50%{opacity:.35}}
+  .statusLabel{font-size:20px;font-weight:650;letter-spacing:-.01em}
+  .statusMeta{color:var(--muted);font-size:13.5px;margin-top:4px;line-height:1.45}
+  .statusMeta b{color:var(--text);font-variant-numeric:tabular-nums}
+
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:22px}
+  button{
+    font:inherit;font-weight:600;font-size:15px;
+    background:var(--accent);color:#fff;border:0;border-radius:11px;
+    padding:12px 22px;cursor:pointer;transition:transform .08s,filter .15s,opacity .15s;
+  }
+  button:hover{filter:brightness(1.08)}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.55;cursor:progress}
+  .auto{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px;user-select:none;cursor:pointer}
+  .auto input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:26px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:13px 15px}
+  .stat .k{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.07em}
+  .stat .v{font-size:20px;font-weight:650;margin-top:5px;font-variant-numeric:tabular-nums}
+
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 10px}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:26px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{
+    text-align:left;font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--muted);padding:11px 14px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--line);
+  }
+  td{padding:12px 14px;border-bottom:1px solid rgba(42,53,96,.6);vertical-align:top;line-height:1.45}
+  tr:last-child td{border-bottom:0}
+  td.name{font-weight:600;white-space:nowrap}
+  td.det{color:var(--muted);font-family:var(--mono);font-size:12px;word-break:break-word}
+  td.ms{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+  .pill{
+    display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    padding:3px 8px;border-radius:999px;white-space:nowrap;
+  }
+  .pill.ok{background:rgba(47,210,122,.14);color:var(--ok);border:1px solid rgba(47,210,122,.35)}
+  .pill.bad{background:rgba(255,93,108,.13);color:var(--bad);border:1px solid rgba(255,93,108,.35)}
+  .pill.warn{background:rgba(255,195,77,.13);color:var(--warn);border:1px solid rgba(255,195,77,.35)}
+  .pill.idle{background:rgba(147,160,200,.13);color:var(--muted);border:1px solid rgba(147,160,200,.3)}
+  .empty{padding:18px 14px;color:var(--muted);font-size:13.5px}
+
+  .log{
+    font-family:var(--mono);font-size:12.5px;line-height:1.7;
+    background:#080d1a;border:1px solid var(--line);border-radius:14px;
+    padding:14px 16px;max-height:260px;overflow:auto;
+  }
+  .log div{white-space:pre-wrap;word-break:break-word}
+  .log .t{color:#5f6b96}
+  .log .ok{color:var(--ok)}
+  .log .bad{color:var(--bad)}
+  .log .txt{color:#c6cff0}
+
+  details.note{margin-top:26px;color:var(--muted);font-size:13.5px;line-height:1.6}
+  details.note summary{cursor:pointer;color:var(--text);font-weight:600;font-size:14px;margin-bottom:10px}
+  details.note ul{padding-left:20px}
+  details.note code{font-family:var(--mono);font-size:12px;background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px;color:#dce3ff}
+  footer{margin-top:28px;color:#6b769c;font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1><span class="gdot"></span> Google Ping</h1>
+    <p class="sub">Tests whether <em>this browser</em> can reach Google right now. Runs entirely on your machine — no server, no data leaves the page.</p>
+  </header>
+
+  <div class="banner" id="banner">
+    <span>⚠️</span>
+    <div><b>Heads up:</b> this page looks like it's inside a sandboxed preview, which blocks all network access. Download the file and open it directly in your browser to see real results.</div>
+  </div>
+
+  <section class="status">
+    <div class="dot" id="dot"></div>
+    <div>
+      <div class="statusLabel" id="label">Ready</div>
+      <div class="statusMeta" id="meta">Press “Ping Google” to test connectivity.</div>
+    </div>
+  </section>
+
+  <div class="controls">
+    <button id="pingBtn">Ping Google</button>
+    <label class="auto"><input type="checkbox" id="autoChk"> Auto-ping every 5s</label>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Pings sent</div><div class="v" id="sSent">0</div></div>
+    <div class="stat"><div class="k">Successful</div><div class="v" id="sOk">0</div></div>
+    <div class="stat"><div class="k">Failed</div><div class="v" id="sBad">0</div></div>
+    <div class="stat"><div class="k">Last</div><div class="v" id="sLast">—</div></div>
+    <div class="stat"><div class="k">Avg</div><div class="v" id="sAvg">—</div></div>
+    <div class="stat"><div class="k">Best</div><div class="v" id="sMin">—</div></div>
+  </div>
+
+  <h2>Probes in this round</h2>
+  <div class="panel">
+    <table>
+      <thead>
+        <tr><th>Check</th><th>How</th><th>Detail</th><th style="text-align:right">Time</th><th>Result</th></tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="5" class="empty">No results yet.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Log</h2>
+  <div class="log" id="log"></div>
+
+  <details class="note">
+    <summary>Why is the HTTP status “opaque / 0” for some checks?</summary>
+    <p>Your browser's security model (CORS) only lets a page read a response body and status code from servers that explicitly opt in with an <code>Access-Control-Allow-Origin</code> header. <code>google.com</code> doesn't send that for normal pages, so a plain <code>fetch()</code> to it would show a fake “failed” even on a perfect connection.</p>
+    <p>So this tool uses checks that <em>are</em> valid from a browser:</p>
+    <ul>
+      <li><b>DNS-over-HTTPS</b> — <code>dns.google/resolve</code> does allow CORS, so you get a real HTTP status code (200) and a real JSON body from Google infrastructure.</li>
+      <li><b>204 beacon</b> — <code>google.com/generate_204</code> requested in <code>no-cors</code> mode. The response is “opaque” (status hidden), but if it resolves, the request genuinely reached Google's edge and Google answered.</li>
+      <li><b>Image beacon</b> — loads <code>google.com/favicon.ico</code>. Images aren't subject to CORS for display, so <code>onload</code> proves the file came back from Google.</li>
+    </ul>
+    <p>If all three fail together, the connection really is down (or a firewall/proxy/VPN is blocking Google). A single failure is usually a hiccup — hit Ping again.</p>
+  </details>
+
+  <footer>Single-file tool · no dependencies · no tracking</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var TIMEOUT = 8000;
+
+  var $ = function(id){ return document.getElementById(id); };
+  var dot = $("dot"), label = $("label"), meta = $("meta"), tbody = $("tbody"), logEl = $("log");
+  var pingBtn = $("pingBtn"), autoChk = $("autoChk");
+
+  var stats = { sent:0, ok:0, bad:0, last:null, total:0, best:null };
+  var running = false;
+  var autoTimer = null;
+
+  /* ---------- helpers ---------- */
+
+  function nowStamp(){
+    var d = new Date();
+    return d.toLocaleTimeString([], {hour12:false}) + "." + String(d.getMilliseconds()).padStart(3,"0");
+  }
+
+  function describeError(err){
+    if (!err) return "unknown error";
+    if (err.name === "AbortError" || err === "timeout") return "timed out after " + (TIMEOUT/1000) + "s";
+    if (err.name === "TypeError") return "network/CORS blocked (" + (err.message || "TypeError") + ")";
+    return (err.name ? err.name + ": " : "") + (err.message || String(err));
+  }
+
+  function round(ms){
+    return Math.round(ms);
+  }
+
+  function log(kind, text){
+    var row = document.createElement("div");
+    var cls = kind === "ok" ? "ok" : kind === "bad" ? "bad" : "txt";
+    row.innerHTML = '<span class="t">' + nowStamp() + '</span>  <span class="' + cls + '">' + text + '</span>';
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setDot(state){
+    dot.className = "dot" + (state ? " " + state : "");
+  }
+
+  function iframeCheck(){
+    var inFrame = false;
+    try { inFrame = window.self !== window.top; } catch(e){ inFrame = true; }
+    if (inFrame) $("banner").classList.add("show");
+  }
+
+  /* ---------- probes ---------- */
+
+  // Probe 1: Google DoH endpoint — CORS-enabled, so we get a real status code.
+  function probeDoH(){
+    var url = "https://dns.google/resolve?name=www.google.com&type=A&_=" + Date.now();
+    var t0 = performance.now();
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort("timeout"); }, TIMEOUT);
+
+    return fetch(url, { cache:"no-store", signal: ctrl.signal })
+      .then(function(res){
+        var ms = performance.now() - t0;
+        return res.json().catch(function(){ return null; }).then(function(json){
+          var dnsStatus = json && typeof json.Status === "number" ? json.Status : null;
+          var answers = json && Array.isArray(json.Answer) ? json.Answer.length : 0;
+          var good = res.ok && (dnsStatus === 0 || answers > 0);
+          return {
+            name: "DNS-over-HTTPS",
+            how: "fetch GET dns.google/resolve (CORS allowed)",
+            detail: "HTTP " + res.status + " · DNS status " + (dnsStatus === null ? "?" : dnsStatus) + " · " + answers + " A record(s)",
+            ms: round(ms),
+            ok: good
+          };
+        });
+      })
+      .catch(function(err){
+        return {
+          name: "DNS-over-HTTPS",
+          how: "fetch GET dns.google/resolve (CORS allowed)",
+          detail: "HTTP — · " + describeError(err),
+          ms: round(performance.now() - t0),
+          ok: false
+        };
+      })
+      .then(function(r){ clearTimeout(timer); return r; });
+  }
+
+  // Probe 2: generate_204 in no-cors mode — opaque result, proves the round trip happened.
+  function probe204(){
+    var url = "https://www.google.com/generate_204?_=" + Date.now();
+    var t0 = performance.now();
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort("timeout"); }, TIMEOUT);
+
+    return fetch(url, { mode:"no-cors", cache:"no-store", redirect:"follow", signal: ctrl.signal })
+      .then(function(res){
+        return {
+          name: "204 beacon",
+          how: "fetch GET google.com/generate_204 (no-cors)",
+          detail: "response type: " + res.type + " · status hidden by browser (opaque) · Google accepted the request",
+          ms: round(performance.now() - t0),
+          ok: true
+        };
+      })
+      .catch(function(err){
+        return {
+          name: "204 beacon",
+          how: "fetch GET google.com/generate_204 (no-cors)",
+          detail: describeError(err),
+          ms: round(performance.now() - t0),
+          ok: false
+        };
+      })
+      .then(function(r){ clearTimeout(timer); return r; });
+  }
+
+  // Probe 3: image beacon — onload means Google's file arrived.
+  function probeImage(){
+    return new Promise(function(resolve){
+      var url = "https://www.google.com/favicon.ico?_=" + Date.now();
+      var t0 = performance.now();
+      var img = new Image();
+      var settled = false;
+      var timer = setTimeout(function(){ finish(false, "timed out after " + (TIMEOUT/1000) + "s"); }, TIMEOUT);
+
+      function finish(ok, note){
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        img.onload = img.onerror = null;
+        resolve({
+          name: "Favicon beacon",
+          how: "new Image() → google.com/favicon.ico",
+          detail: ok ? "image loaded (favicon.ico received)" : note,
+          ms: round(performance.now() - t0),
+          ok: ok
+        });
+      }
+
+      img.onload = function(){ finish(true); };
+      img.onerror = function(){ finish(false, "image failed to load"); };
+      img.src = url;
+    });
+  }
+
+  /* ---------- round ---------- */
+
+  function render(results){
+    tbody.innerHTML = "";
+    results.forEach(function(r){
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td class="name">' + r.name + '</td>' +
+        '<td class="det">' + r.how + '</td>' +
+        '<td class="det">' + r.detail + '</td>' +
+        '<td class="ms">' + (r.ok ? r.ms + " ms" : "—") + '</td>' +
+        '<td><span class="pill ' + (r.ok ? "ok" : "bad") + '">' + (r.ok ? "Pass" : "Fail") + '</span></td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  function updateStats(ok, ms){
+    stats.sent++;
+    if (ok){
+      stats.ok++;
+      stats.last = ms;
+      stats.total += ms;
+      stats.best = stats.best === null ? ms : Math.min(stats.best, ms);
+    } else {
+      stats.bad++;
+    }
+    $("sSent").textContent = stats.sent;
+    $("sOk").textContent = stats.ok;
+    $("sBad").textContent = stats.bad;
+    $("sLast").textContent = stats.last === null ? "—" : stats.last + " ms";
+    $("sAvg").textContent = stats.ok ? Math.round(stats.total / stats.ok) + " ms" : "—";
+    $("sMin").textContent = stats.best === null ? "—" : stats.best + " ms";
+  }
+
+  function runPing(){
+    if (running) return;
+    running = true;
+    pingBtn.disabled = true;
+    setDot("busy");
+    label.textContent = "Pinging…";
+    meta.textContent = "Contacting Google from this browser.";
+
+    var online = navigator.onLine;
+    log("txt", "--- ping start (navigator.onLine = " + online + ") ---");
+
+    var started = performance.now();
+
+    Promise.all([probeDoH(), probe204(), probeImage()]).then(function(results){
+      var elapsed = round(performance.now() - started);
+      var passes = results.filter(function(r){ return r.ok; });
+      var success = passes.length > 0;
+
+      render(results);
+      results.forEach(function(r){
+        log(r.ok ? "ok" : "bad", (r.ok ? "PASS  " : "FAIL  ") + r.name + " — " + r.detail + (r.ok ? " (" + r.ms + " ms)" : ""));
+      });
+
+      var bestLatency = passes.length ? Math.min.apply(null, passes.map(function(r){ return r.ms; })) : null;
+
+      if (success){
+        setDot("ok");
+        label.textContent = "Success — Google is reachable";
+        meta.innerHTML = passes.length + " of " + results.length + " checks passed · best response <b>" +
+          bestLatency + " ms</b> · round took <b>" + elapsed + " ms</b>";
+        log("ok", "RESULT: SUCCESS — " + passes.length + "/" + results.length + " probes passed, best " + bestLatency + " ms");
+      } else {
+        setDot("bad");
+        label.textContent = "Failed — could not reach Google";
+        meta.innerHTML = "All " + results.length + " checks failed in <b>" + elapsed + " ms</b>. " +
+          (online ? "Your browser says it's online, so a firewall, VPN, DNS filter or proxy is likely blocking it."
+                  : "Your browser also reports being <b>offline</b> — check your network connection first.");
+        log("bad", "RESULT: FAILED — 0/" + results.length + " probes passed");
+      }
+
+      updateStats(success, bestLatency);
+    }).catch(function(err){
+      setDot("bad");
+      label.textContent = "Error";
+      meta.textContent = describeError(err);
+      log("bad", "unexpected error: " + describeError(err));
+    }).then(function(){
+      running = false;
+      pingBtn.disabled = false;
+    });
+  }
+
+  /* ---------- wiring ---------- */
+
+  pingBtn.addEventListener("click", runPing);
+
+  autoChk.addEventListener("change", function(){
+    if (autoTimer){ clearInterval(autoTimer); autoTimer = null; }
+    if (autoChk.checked){
+      runPing();
+      autoTimer = setInterval(runPing, 5000);
+    }
+  });
+
+  iframeCheck();
+  setTimeout(runPing, 350);
+})();
+</script>
+</body>
+</html>
