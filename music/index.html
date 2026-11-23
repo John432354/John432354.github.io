@@ -731,44 +731,29 @@ var ICONS = {
 };
 
 /* ------------------------------ config ------------------------------ */
-var DEFAULT_INSTANCES = [
-  // Piped public instances (ordered by reliability; custom instance wins).
-  // Taken from the official list (Team Piped docs) — if one is down the
-  // fallback chain simply skips it.
-  'https://pipedapi.kavin.rocks',
-  'https://api.piped.yt',
-  'https://pipedapi.leptons.xyz',
-  'https://piped-api.privacy.com.de',
-  'https://pipedapi.nosebs.ru',
-  'https://pipedapi.adminforge.de',
-  'https://pipedapi.drgns.space',
-  'https://pipedapi.owo.si',
-  'https://pipedapi.ducks.party',
-  'https://piped-api.codespace.cz',
-  'https://pipedapi.reallyaweso.me',
-  'https://api.piped.private.coffee',
-  'https://pipedapi.darkness.services',
-  'https://pipedapi.orangenet.cc',
-  'https://pipedapi-libre.kavin.rocks'
-];
+/* ------------------------------ provider directory ------------------------------
+   Instance lists are fetched LIVE at runtime and cached — dead or stale instances
+   never stall the chain. Each provider has a hardcoded fallback built from the
+   published, browser-verified lists. The app never embeds credentials; public
+   instance URLs only, and these services only ever receive a track's video id. */
+var DIRECTORY_CACHE = {};
+var DIRECTORY_TTL = 15 * 60 * 1000;
+var DIRECTORY_TTL_FAIL = 60 * 1000;
 
-/* Invidious public instances — alternate search/stream provider. */
-var INVIDIOUS_INSTANCES = [
-  'https://iv.datyif',
-  'https://invidious.f-person.de',
-  'https://invidious.tiekoetter.com',
-  'https://yt.chocolatemoo53.com'
-];
+/* Piped — public instances (jayxdcode/piped-instances minimal.json, isLatest=true). */
+var PIPED_DIRECTORY = 'https://raw.githubusercontent.com/jayxdcode/piped-instances/main/public/minimal.json';
+var PIPED_FALLBACK = ['https://api.piped.private.coffee', 'https://pipedapi.ducks.party'];
 
-/* Cobalt public instances — directory-driven (fetched at runtime),
-   with a hardcoded fallback if the directory is unreachable. */
-var COBALT_DIRECTORY = 'https://instances.cobalt.best/api/instances.json';
-var COBALT_FALLBACK_INSTANCES = [
-  'https://cobalt-api.meowing.de',
-  'https://cobalt-backend.canine.tools',
-  'https://kityune.imput.net',
-  'https://capi.3kh0.net'
+/* Invidious — instances that actually returned stream metadata (train233kei/invidious-watch). */
+var INVIDIOUS_DIRECTORY = 'https://raw.githubusercontent.com/train233kei/invidious-watch/main/instances.json';
+var INVIDIOUS_FALLBACK = ['https://iv.catgirl.cloud', 'https://invidious.ritoge.com'];
+
+/* Cobalt — instances.cobalt.best/instances.json (current) with the legacy shape as fallback. */
+var COBALT_DIRECTORIES = [
+  'https://instances.cobalt.best/instances.json',
+  'https://instances.cobalt.best/api/instances.json'
 ];
+var COBALT_FALLBACK = ['https://cobalt-api.meowing.de', 'https://cobalt-backend.canine.tools', 'https://capi.3kh0.net'];
 var COBALT_MAX_INSTANCES = 3;
 
 var AUDIO_QUAL_KBPS = function(q){
@@ -797,18 +782,129 @@ function isPlainUrl(u){
   return /^https?:\/\//i.test(String(u || ''));
 }
 
-/* Strict-ish media validation for resolved URLs: reject HTML/errors,
-   tolerate unreachable probes (the <audio> element fetches without CORS). */
+async function directoryFetch(urls, timeout){
+  var errs = [];
+  for (var i = 0; i < urls.length; i++){
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, timeout || 5000);
+    try {
+      var res = await fetch(urls[i], { signal: ctrl.signal, cache: 'no-store' });
+      clearTimeout(timer);
+      if (!res.ok) { errs.push(hostLabel(urls[i]) + ' HTTP ' + res.status); continue; }
+      return await res.text();
+    } catch (e) {
+      clearTimeout(timer);
+      errs.push(hostLabel(urls[i]) + ' → ' + (e && e.message ? e.message : 'failed'));
+    }
+  }
+  throw new Error(errs.join(' · ') || 'directory unreachable');
+}
+
+function pipedListFromText(txt){
+  var d;
+  try { d = JSON.parse(txt); } catch (e) { return []; }
+  var arr = Array.isArray(d) ? d : (d && d.instances);
+  if (!Array.isArray(arr)) return [];
+  var out = [];
+  for (var i = 0; i < arr.length; i++){
+    var x = arr[i] || {};
+    if (x.isLatest === false) continue;
+    var u = String(x.api_url || x.apiUrl || x.api || x.url || '').trim();
+    if (!isPlainUrl(u)) continue;
+    u = u.replace(/\/+$/, '');
+    if (out.indexOf(u) < 0) out.push(u);
+  }
+  return out;
+}
+
+function invidiousListFromText(txt){
+  var d;
+  try { d = JSON.parse(txt); } catch (e) { return []; }
+  var urls = [];
+  if (d && d.endpoints && d.endpoints.video && Array.isArray(d.endpoints.video.working_instances)){
+    urls = d.endpoints.video.working_instances.slice();
+  }
+  if (!urls.length && d && Array.isArray(d.instances)){
+    for (var i = 0; i < d.instances.length; i++){
+      var x = d.instances[i] || {};
+      if (x.url) urls.push(x.url);
+    }
+  }
+  var out = [];
+  for (var i = 0; i < urls.length; i++){
+    var u = String(urls[i] || '').trim();
+    if (!isPlainUrl(u)) continue;
+    u = u.replace(/\/+$/, '');
+    if (out.indexOf(u) < 0) out.push(u);
+  }
+  return out;
+}
+
+function cobaltListFromText(txt){
+  var d;
+  try { d = JSON.parse(txt); } catch (e) { return []; }
+  var arr = Array.isArray(d) ? d : (d && Array.isArray(d.instances) ? d.instances : []);
+  var out = [];
+  for (var i = 0; i < arr.length; i++){
+    var x = arr[i] || {};
+    var raw = String(x.api || x.url || x.apiUrl || '').trim();
+    if (!raw) continue;
+    if (x.online !== true) continue;                     // require explicit online === true
+    if (x.info && (x.info.auth === true)) continue;      // no key/auth-gated instances
+    var svc = x.services || {};
+    var yOk = svc.youtube === true || svc.youtube === 'ok' || svc.youtube === 'up' || svc.youtube === 'healthy';
+    if (!yOk) continue;                                  // YouTube must actually work
+    // Known non-browser-compatible Cobalt instances (Turnstile / key-gated) — never fetch them.
+    if (/imput\.net|api\.cobalt\.tools/i.test(raw)) continue;
+    var u = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
+    u = u.replace(/\/+$/, '');
+    if (!isPlainUrl(u)) continue;
+    out.push({ url: u, score: Number(x.score) || 0 });
+  }
+  out.sort(function(a, b){ return b.score - a.score; });
+  var seen = {}, res = [];
+  for (var j = 0; j < out.length; j++){ if (seen[out[j].url]) continue; seen[out[j].url] = 1; res.push(out[j].url); }
+  return res;
+}
+
+async function providerList(kind, urls, fallback, parse){
+  var now = Date.now();
+  var cached = DIRECTORY_CACHE[kind];
+  if (cached && now - cached.at < (cached.short ? DIRECTORY_TTL_FAIL : DIRECTORY_TTL)) return cached.data;
+  var list = null;
+  try {
+    var txt = await directoryFetch(urls, 5000);
+    list = parse(txt);
+  } catch (e) { list = null; }
+  if (list && list.length){
+    DIRECTORY_CACHE[kind] = { at: now, data: list, short: false };
+    return list;
+  }
+  var fb = fallback.slice();
+  DIRECTORY_CACHE[kind] = { at: now, data: fb, short: true };
+  return fb;
+}
+
+function pipedLiveList(){ return providerList('piped', [PIPED_DIRECTORY], PIPED_FALLBACK, pipedListFromText); }
+function invidiousLiveList(){ return providerList('invidious', [INVIDIOUS_DIRECTORY], INVIDIOUS_FALLBACK, invidiousListFromText); }
+function cobaltLiveList(){ return providerList('cobalt', COBALT_DIRECTORIES, COBALT_FALLBACK, cobaltListFromText); }
+
+/* Strict-ish media validation for resolved URLs. <audio> plays cross-origin
+   media without CORS, so only a confidently-bad URL (HTML/JSON/error body or a
+   non-audio response sniffed out) rejects; unreadable URLs are trusted — the
+   audio element will surface the real outcome. */
 async function probeAudioUrl(url, timeout){
-  var host = '';
-  try { host = new URL(url).host; } catch (e) { throw new Error('bad audio URL'); }
+  try { new URL(url); } catch (e) { throw new Error('bad audio URL'); }
   var ctrl = new AbortController();
   var timer = setTimeout(function(){ ctrl.abort(); }, timeout || 6000);
   try {
     var res = await fetch(url, { headers: { 'Range': 'bytes=0-8191' }, signal: ctrl.signal, cache: 'no-store' });
     clearTimeout(timer);
-    if (!res || !res.ok) return { ok: true, known: false };
-    var ct = (res.headers.get('content-type') || '').toLowerCase();
+    var ct = (res.headers && res.headers.get ? (res.headers.get('content-type') || '') : '').toLowerCase();
+    if (!res || !res.ok){
+      if (/^text\/html|^application\/json|^text\/xml|^application\/xml|^text\/plain/.test(ct)) throw new Error('not media (HTTP ' + (res && res.status ? res.status : 0) + ')');
+      return { ok: true, known: false };
+    }
     if (/text\/html|application\/json|javascript/.test(ct)) throw new Error('not media (' + (ct || 'unknown type') + ')');
     if (/^audio\//.test(ct)) return { ok: true, known: true };
     try {
@@ -834,16 +930,14 @@ async function probeAudioUrl(url, timeout){
   } catch (e) {
     clearTimeout(timer);
     if (e && e.message && /not media/.test(e.message)) throw e;
-    /* Network/CORS/probe failure: <audio> does not need CORS, so direct
-       audio CDN URLs are still trustworthy. */
-    if (/^https?:\/\//i.test(url)) return { ok: true, known: false };
+    if (isPlainUrl(url)) return { ok: true, known: false };
     throw e;
   }
 }
 
 function pickAudio(list, kbps){
   if (!list || !list.length) return null;
-  list.sort(function(a, b){ return a.bitrate - b.bitrate; });
+  list = list.slice().sort(function(a, b){ return a.bitrate - b.bitrate; });
   var pick = null;
   for (var i = 0; i < list.length; i++){ if (list[i].bitrate <= kbps) pick = list[i]; }
   return pick || list[0];
@@ -856,36 +950,37 @@ function absUrl(base, u){
   return base.replace(/\/+$/, '') + '/' + u.replace(/^\/+/, '');
 }
 
-/* ---------- piped (current provider, now strict) ---------- */
+/* ---------- piped (direct URLs; <audio> plays them without CORS) ---------- */
 async function pipedResolve(videoId, kbps){
-  /* Keep the Piped chain short: the working host first, then a few official
-     ones — this provider has fallbacks behind it, so no need to brute-force
-     all fifteen. */
   var hosts = [];
   if (Backend.working) hosts.push(Backend.working);
-  DEFAULT_INSTANCES.slice(0, 2).forEach(function(h){ if (hosts.indexOf(h) < 0) hosts.push(h); });
+  var live = await pipedLiveList();
+  live.forEach(function(h){ if (hosts.indexOf(h) < 0) hosts.push(h); });
+  hosts = hosts.slice(0, 3);
   var d = await Backend.get('/streams/' + videoId, 7000, hosts.length ? hosts : undefined);
   var list = (d.audioStreams || []).map(function(a){
+    if (!a || !a.url) return null;
     var br = Number(a.bitrate) || 0;
     if (br > 10000) br = Math.round(br / 1000);
     return { url: a.url, bitrate: br };
-  }).filter(function(a){ return a.url; });
+  }).filter(function(a){ return a && a.url; });
   if (!list.length) throw new Error('no audio streams');
   var pick = pickAudio(list, kbps);
   var sniff = await probeAudioUrl(pick.url, 6000);
   if (!sniff.ok) throw new Error('audio URL failed validation');
-  return { url: pick.url, host: Backend.working || '', provider: 'piped', bitrate: pick.bitrate };
+  return { url: pick.url, host: Backend.working || hosts[0] || '', provider: 'piped', bitrate: pick.bitrate };
 }
 
-/* ---------- invidious (alternate provider) ---------- */
+/* ---------- invidious (instance-side /videoplayback proxy) ---------- */
 async function invidiousResolve(videoId, kbps){
+  var hosts = await invidiousLiveList();
   var errs = [];
-  for (var i = 0; i < Math.min(INVIDIOUS_INSTANCES.length, 3); i++){
-    var host = INVIDIOUS_INSTANCES[i];
+  for (var i = 0; i < Math.min(hosts.length, 3); i++){
+    var host = hosts[i];
     var ctrl = new AbortController();
     var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
     try {
-      var res = await fetch(host + '/api/v1/videos/' + videoId + '?local=true', { signal: ctrl.signal, cache: 'no-store' });
+      var res = await fetch(host + '/api/v1/videos/' + encodeURIComponent(videoId) + '?local=true', { signal: ctrl.signal, cache: 'no-store' });
       clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var d = await res.json();
@@ -893,9 +988,11 @@ async function invidiousResolve(videoId, kbps){
         if (!a || !a.url) return null;
         var br = Number(a.bitrate) || 0;
         if (br > 10000) br = Math.round(br / 1000);
-        return { url: absUrl(host, a.url), bitrate: br, type: a.type || '' };
-      }).filter(function(a){ return a && /^audio\//.test(a.type) && a.url; });
-      if (!list.length) throw new Error('no audio adaptiveFormats');
+        var type = String(a.type || a.mimeType || '').toLowerCase();
+        if (!/^audio\//.test(type)) return null;
+        return { url: absUrl(host, a.url), bitrate: br, type: type };
+      }).filter(function(a){ return a && a.url; });
+      if (!list.length) throw new Error('no audio streams');
       var pick = pickAudio(list, kbps);
       var sniff = await probeAudioUrl(pick.url, 6000);
       if (!sniff.ok) throw new Error('audio URL failed validation');
@@ -908,33 +1005,11 @@ async function invidiousResolve(videoId, kbps){
   throw new Error(errs.join(' · ') || 'no invidious instance worked');
 }
 
-/* ---------- cobalt (fourth provider: streams back from instance) ---------- */
-async function getCobaltInstances(){
-  try {
-    var ctrl = new AbortController();
-    var timer = setTimeout(function(){ ctrl.abort(); }, 6000);
-    var res = await fetch(COBALT_DIRECTORY, { signal: ctrl.signal, cache: 'no-store' });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var list = await res.json();
-    if (!Array.isArray(list)) throw new Error('unexpected directory shape');
-    var good = list.filter(function(x){
-      if (!x || !x.api || x.online !== true) return false;
-      if (x.info && x.info.auth === true) return false;
-      if (x.services && x.services.youtube !== true) return false;
-      return true;
-    });
-    good.sort(function(a, b){ return (Number(b.score) || 0) - (Number(a.score) || 0); });
-    var hosts = good.map(function(x){ return 'https://' + (x.api || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''); }).filter(isPlainUrl);
-    if (hosts.length) return hosts.slice(0, COBALT_MAX_INSTANCES);
-  } catch (e) { /* fall through to hardcoded list */ }
-  return COBALT_FALLBACK_INSTANCES.slice();
-}
-
+/* ---------- cobalt (instance streams back the audio) ---------- */
 async function cobaltResolve(videoId, kbps){
-  var hosts = await getCobaltInstances();
+  var hosts = await cobaltLiveList();
   var errs = [];
-  for (var i = 0; i < hosts.length; i++){
+  for (var i = 0; i < Math.min(hosts.length, COBALT_MAX_INSTANCES); i++){
     var host = hosts[i];
     var ctrl = new AbortController();
     var timer = setTimeout(function(){ ctrl.abort(); }, 10000);
@@ -1124,12 +1199,28 @@ var Backend = {
     var custom = String(state.settings.instance || '').trim().replace(/\/+$/, '');
     if (custom && !/^https?:\/\//i.test(custom)) custom = 'https://' + custom;
     var list = custom ? [custom] : [];
-    DEFAULT_INSTANCES.forEach(function(h){ if (list.indexOf(h) < 0) list.push(h); });
+    PIPED_FALLBACK.forEach(function(h){ if (list.indexOf(h) < 0) list.push(h); });
     return list;
   },
 
+  /* live Piped instances (cached) win over the fallback; custom instance stays first */
+  _listHosts: async function(){
+    var custom = String(state.settings.instance || '').trim().replace(/\/+$/, '');
+    if (custom && !/^https?:\/\//i.test(custom)) custom = 'https://' + custom;
+    var live = [];
+    try { live = await pipedLiveList(); } catch (e) {}
+    if (!live || !live.length) live = PIPED_FALLBACK.slice();
+    var out = [];
+    if (custom) out.push(custom);
+    live.forEach(function(h){ if (out.indexOf(h) < 0) out.push(h); });
+    PIPED_FALLBACK.forEach(function(h){ if (out.indexOf(h) < 0) out.push(h); });
+    if (out.length > 8) out = out.slice(0, 8);
+    return out;
+  },
+
   get: async function(path, timeout, hostsOverride){
-    var hosts = hostsOverride || this.hosts();
+    var hosts = hostsOverride || await this._listHosts();
+    if (!hosts || !hosts.length) throw new Error('no Piped instances available');
     if (this.working){
       hosts = [this.working].concat(hosts.filter(function(h){ return h !== Backend.working; }));
     }
@@ -1270,7 +1361,7 @@ var Backend = {
 Backend.resolveAudio = async function(videoId, kbps){
   if (!videoId) throw new Error('no video id');
   var start = Date.now();
-  var budget = 26000;
+  var budget = 45000;
   var errs = [];
   var providers = [
     { name: 'Piped',     fn: pipedResolve },
@@ -1287,7 +1378,7 @@ Backend.resolveAudio = async function(videoId, kbps){
       errs.push(providers[i].name + ': ' + (e && e.message ? e.message : 'failed'));
     }
   }
-  throw new Error(errs.join(' · ') || 'all audio providers failed');
+  throw new Error(errs.join(' · ') || 'All audio providers failed');
 };
 
 /* ------------------------------ player ------------------------------
@@ -2055,7 +2146,8 @@ function viewSettings(){
       : 'Not resolved yet — resolves on first play.') + '</div></div>' +
     '<button class="chip" data-act="audio-test">Test now</button></div>' +
     '<div class="inputrow"><div class="hint">Piped → Invidious → Cobalt — the first validated source wins. ' +
-    'Search stays on Piped; audio resolution uses the full chain. These public services see your track IDs and titles. If any one fails, the app falls back to the next.</div></div>' +
+    'Instance lists refresh live from the providers’ own directories, so stale instances never stall a track. ' +
+    'Search stays on Piped; audio resolution uses the full chain. These public services see your track IDs and titles; Cobalt is last resort.</div></div>' +
     '</div></div>';
 
   html += '<div class="setsec"><h3>Download behaviour</h3><div class="card-box">' +
