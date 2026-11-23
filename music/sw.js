@@ -13,7 +13,7 @@
    Without it everything still works — you just need the network to load.
    ========================================================================== */
 
-const VERSION = 'sonora-v2';
+const VERSION = 'sonora-v3';
 
 const SHELL = [
   './',
@@ -46,7 +46,7 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  // Never intercept the music backend (YouTube / Piped / Invidious calls)
+  // Never intercept the music backend (YouTube / Invidious / Cobalt calls)
   if (url.origin !== self.location.origin) return;
 
   // Navigations: network first, fall back to the cached app shell when offline
