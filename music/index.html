@@ -46,8 +46,7 @@
     --tabbar-h:58px;
     --safe-b:env(safe-area-inset-bottom, 0px);
     --safe-t:env(safe-area-inset-top, 0px);
-    --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
-    --font:var(--serif);
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --bevel:inset 0 1px 0 rgba(255,240,215,.09), inset 0 -1px 0 rgba(0,0,0,.45);
     --hardshadow:0 4px 0 rgba(0,0,0,.5), 0 12px 24px rgba(0,0,0,.5);
@@ -134,7 +133,7 @@
       min-height:0;overflow-y:auto;
     }
     #sbBrand{padding:2px 6px 6px;display:flex;flex-direction:column;gap:4px}
-    #sbBrand .wordmark{font-family:var(--serif);font-size:26px;font-weight:700;letter-spacing:.02em;color:#f6edd9;text-shadow:0 2px 6px rgba(0,0,0,.8)}
+    #sbBrand .wordmark{font-family:var(--font);font-size:26px;font-weight:700;letter-spacing:.02em;color:#f6edd9;text-shadow:0 2px 6px rgba(0,0,0,.8)}
     #sbBrand .sub{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--muted2);text-transform:uppercase}
     #sidebar::after{content:"\25B0\2002";display:none}
     #sidebar #tabbar{
@@ -199,7 +198,7 @@
     box-shadow:0 1px 0 rgba(255,232,198,.05), 0 2px 8px rgba(0,0,0,.5);
   }
   #topbar h1{
-    font-family:var(--serif);
+    font-family:var(--font);
     font-size:21px;font-weight:700;letter-spacing:.01em;margin:0;flex:1;min-width:0;
     display:flex;align-items:center;gap:8px;
     text-shadow:0 -1px 0 rgba(0,0,0,.8), 0 1px 0 rgba(255,236,205,.08);
@@ -242,7 +241,7 @@
     box-shadow:0 14px 30px rgba(0,0,0,.35);
   }
   .hero h2{
-    font-family:var(--serif);font-size:25px;font-weight:700;margin:0 0 16px;letter-spacing:.005em;
+    font-family:var(--font);font-size:25px;font-weight:700;margin:0 0 16px;letter-spacing:.005em;
     text-shadow:0 2px 6px rgba(0,0,0,.75);color:#f6eedd;
   }
   .hero h2::after{content:"";display:block;height:1px;background:linear-gradient(90deg,var(--accent),transparent 80%);margin-top:8px;opacity:.7}
@@ -261,7 +260,7 @@
 
   .sec{padding-top:22px}
   .sec-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 16px 12px}
-  .sec-head h3{font-family:var(--serif);font-size:18px;font-weight:700;margin:0;letter-spacing:.02em;color:#f2e6cd}
+  .sec-head h3{font-family:var(--font);font-size:18px;font-weight:700;margin:0;letter-spacing:.02em;color:#f2e6cd}
   .sec-head .more{font-size:11.5px;font-weight:800;color:var(--muted2);letter-spacing:.14em}
 
   .shelf{display:flex;gap:12px;overflow-x:auto;padding:0 16px 6px}
@@ -271,7 +270,7 @@
     box-shadow:0 10px 22px rgba(0,0,0,.55), var(--bevel);border:1px solid #000;
   }
   .card .t{
-    font-family:var(--serif);font-size:13.5px;font-weight:700;margin-top:10px;line-height:1.32;
+    font-family:var(--font);font-size:13.5px;font-weight:700;margin-top:10px;line-height:1.32;
     display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
     text-shadow:0 1px 0 #000;
   }
@@ -341,8 +340,8 @@
 
   /* ---------- library ---------- */
   .libhead{padding:8px 16px 14px;display:flex;align-items:center;justify-content:space-between}
-  .libhead .lbl{font-family:var(--serif);font-size:22px;font-weight:700;color:#f4ead2;text-shadow:0 2px 5px rgba(0,0,0,.7)}
-  .libhead h2{font-family:var(--serif);font-size:22px;font-weight:700;margin:0;letter-spacing:.02em;color:#f4ead2}
+  .libhead .lbl{font-family:var(--font);font-size:22px;font-weight:700;color:#f4ead2;text-shadow:0 2px 5px rgba(0,0,0,.7)}
+  .libhead h2{font-family:var(--font);font-size:22px;font-weight:700;margin:0;letter-spacing:.02em;color:#f4ead2}
   .addbtn{
     display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800;color:var(--accent-ink);
     background:linear-gradient(180deg, #f0bc58, #c98a2c);
@@ -352,12 +351,12 @@
   .addbtn svg{width:15px;height:15px}
   .addbtn:active{transform:translateY(2px);box-shadow:inset 0 2px 4px rgba(0,0,0,.4)}
   .empty{padding:44px 30px;text-align:center;color:var(--muted)}
-  .empty .big{font-family:var(--serif);font-size:16px;font-weight:700;color:#e9dcc2;margin-bottom:8px}
+  .empty .big{font-family:var(--font);font-size:16px;font-weight:700;color:#e9dcc2;margin-bottom:8px}
   .empty p{font-size:13px;line-height:1.55;margin:0;color:var(--muted)}
 
   /* ---------- settings ---------- */
   .setsec{margin:0 16px 22px}
-  .setsec h3{font-family:var(--serif);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted2);margin:0 0 10px;font-weight:800}
+  .setsec h3{font-family:var(--font);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted2);margin:0 0 10px;font-weight:800}
   .card-box{background:linear-gradient(180deg, var(--surface2), var(--surface));border:1px solid var(--line);box-shadow:var(--bevel);overflow:hidden}
   .setrow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 15px;border-bottom:1px solid var(--line-2)}
   .setrow:last-child{border-bottom:0}
@@ -416,14 +415,14 @@
   }
   .sheet.open{transform:translateY(0)}
   .np-top{display:flex;align-items:center;padding:calc(var(--safe-t) + 10px) 14px 6px;gap:10px;border-bottom:1px solid var(--line-2)}
-  .np-top .label{flex:1;text-align:center;font-family:var(--serif);font-size:11px;font-weight:700;letter-spacing:.24em;color:var(--muted2)}
+  .np-top .label{flex:1;text-align:center;font-family:var(--font);font-size:11px;font-weight:700;letter-spacing:.24em;color:var(--muted2)}
   .np-art{
     width:min(78vw,300px);aspect-ratio:1;margin:16px auto 0;
     border:1px solid #000;box-shadow:0 24px 50px rgba(0,0,0,.65), 0 0 0 6px rgba(224,166,63,.08);
     position:relative;overflow:hidden;flex:0 0 auto;background-size:cover;background-position:center;background-color:#241c12;
   }
   .np-body{padding:26px 24px 0;flex:1 1 auto;min-height:0;overflow-y:auto}
-  .np-title{font-family:var(--serif);font-size:22px;font-weight:700;letter-spacing:.01em;line-height:1.22;
+  .np-title{font-family:var(--font);font-size:22px;font-weight:700;letter-spacing:.01em;line-height:1.22;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 2px 4px rgba(0,0,0,.6)}
   .np-artist{font-size:14.5px;color:var(--muted);margin-top:6px}
   .np-qual{
@@ -472,7 +471,7 @@
   }
   #asheet.open{transform:translateY(0)}
   #asheet .ahead{padding:16px 20px 12px;border-bottom:1px solid var(--line-2);font-size:12px;color:var(--muted)}
-  #asheet .ahead b{display:block;font-family:var(--serif);font-size:15px;color:#f3e7cb;margin-bottom:3px}
+  #asheet .ahead b{display:block;font-family:var(--font);font-size:15px;color:#f3e7cb;margin-bottom:3px}
   .aitem{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:15px 20px;font-size:15px;font-weight:600;border-bottom:1px solid var(--line-2)}
   .aitem:active{background:rgba(224,166,63,.1)}
   .aitem svg{width:20px;height:20px;color:var(--muted)}
@@ -497,7 +496,7 @@
   .install .i{color:var(--accent);flex:0 0 auto;margin-top:1px}
   .install .i svg{width:24px;height:24px}
   .install .txt{flex:1;font-size:12.5px;line-height:1.5;color:#e3d6b8}
-  .install .txt b{color:#f8edd6;display:block;font-size:13.5px;margin-bottom:3px;font-family:var(--serif)}
+  .install .txt b{color:#f8edd6;display:block;font-size:13.5px;margin-bottom:3px;font-family:var(--font)}
   .install .x{color:var(--muted);font-size:12px;font-weight:800;padding:2px 5px}
   .install .go{margin-top:10px;display:inline-flex;align-items:center;gap:6px;background:linear-gradient(180deg,#f0bc58,#c98a2c);color:#241503;
     font-size:12px;font-weight:800;padding:9px 15px;border:1px solid #7a4e16;box-shadow:var(--bevel)}
@@ -512,11 +511,11 @@
   .lyrics-body{min-height:52px}
   .lyrics-status{font-family:var(--mono);font-size:11px;color:var(--muted2);text-align:center;padding:10px 0}
   .lyrics-plain{
-    font-family:var(--serif);font-size:14.5px;line-height:1.72;color:#e6dcc6;
+    font-family:var(--font);font-size:14.5px;line-height:1.72;color:#e6dcc6;
     padding:0 6px;white-space:normal;text-align:center;
   }
   .lyrics-line{
-    font-family:var(--serif);font-size:15px;line-height:1.55;color:#8a7d61;
+    font-family:var(--font);font-size:15px;line-height:1.55;color:#8a7d61;
     text-align:center;padding:5px 8px;transition:color .3s,transform .3s;
     transform-origin:center;
   }
@@ -552,7 +551,7 @@
     background:linear-gradient(180deg, #2f1e18, #241612);
     border:1px solid #5a2a20;box-shadow:var(--bevel);font-size:12.5px;line-height:1.5;color:#f1c4b7
   }
-  .errbox b{color:#fbc7b6;display:block;margin-bottom:5px;font-size:13.5px;font-family:var(--serif)}
+  .errbox b{color:#fbc7b6;display:block;margin-bottom:5px;font-size:13.5px;font-family:var(--font)}
   .errbox code{font-family:var(--mono);font-size:11px;color:#f0917d;word-break:break-word}
   .errbox .retry{margin-top:12px;display:inline-flex;background:linear-gradient(180deg,#f0bc58,#cf9130);color:#241503;font-weight:800;font-size:12px;padding:10px 16px;border:1px solid #7a4e16;box-shadow:var(--bevel)}
   .errbox .retry:active{transform:translateY(1px)}
@@ -581,8 +580,8 @@
   .playlist-hero-bg{background:linear-gradient(180deg,rgba(224,166,63,.24),rgba(0,0,0,0)) !important}
   .album-hero-bg{background:linear-gradient(180deg,rgba(74,106,142,.55),rgba(0,0,0,.1)) !important}
   .hero-art{width:120px;height:120px;flex:0 0 auto;border:1px solid #000;box-shadow:0 16px 32px rgba(0,0,0,.55)}
-  .hero-eyebrow{font-family:var(--serif);font-size:10.5px;font-weight:700;letter-spacing:.22em;color:#f0d091}
-  .hero-title{font-family:var(--serif);font-size:21px;font-weight:700;letter-spacing:.01em;margin-top:6px;line-height:1.18;color:#f6edd9;text-shadow:0 2px 6px rgba(0,0,0,.7)}
+  .hero-eyebrow{font-family:var(--font);font-size:10.5px;font-weight:700;letter-spacing:.22em;color:#f0d091}
+  .hero-title{font-family:var(--font);font-size:21px;font-weight:700;letter-spacing:.01em;margin-top:6px;line-height:1.18;color:#f6edd9;text-shadow:0 2px 6px rgba(0,0,0,.7)}
   .hero-sub{font-size:12px;color:var(--muted);margin-top:8px}
   .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:8px;font-family:var(--mono)}
   .import-preview{padding:2px 16px 8px}
@@ -683,13 +682,13 @@
 /* =====================================================================
    Sonora — YouTube Music client, single file
    ---------------------------------------------------------------------
-   Backend  : public Piped API instances (no key, no server, no login)
-              → search filter=music_songs returns YouTube Music *songs*,
-                which is the whole point: no music videos.
-              → optional YouTube Data API key as a fallback (Settings)
-   Playback : Piped audio streams played directly through a plain
-              <audio> element — no YouTube iframe, no ads, no music
-              videos, no external players
+   Backend  : public Piped API instances for search (no key, no server,
+              no login) — filter=music_songs returns YouTube Music *songs*,
+              which is the whole point: no music videos.
+   Playback : audio resolution races Piped → Invidious → Cobalt. The first
+              validated source wins (HTML/error responses are rejected), so
+              the app degrades gracefully when one or more providers are
+              rate-limited. No YouTube iframe, no ads, no external players.
    Storage  : IndexedDB (library, downloads, audio blobs) + localStorage
    ===================================================================== */
 
@@ -752,6 +751,222 @@ var DEFAULT_INSTANCES = [
   'https://pipedapi.orangenet.cc',
   'https://pipedapi-libre.kavin.rocks'
 ];
+
+/* Invidious public instances — alternate search/stream provider. */
+var INVIDIOUS_INSTANCES = [
+  'https://iv.datyif',
+  'https://invidious.f-person.de',
+  'https://invidious.tiekoetter.com',
+  'https://yt.chocolatemoo53.com'
+];
+
+/* Cobalt public instances — directory-driven (fetched at runtime),
+   with a hardcoded fallback if the directory is unreachable. */
+var COBALT_DIRECTORY = 'https://instances.cobalt.best/api/instances.json';
+var COBALT_FALLBACK_INSTANCES = [
+  'https://cobalt-api.meowing.de',
+  'https://cobalt-backend.canine.tools',
+  'https://kityune.imput.net',
+  'https://capi.3kh0.net'
+];
+var COBALT_MAX_INSTANCES = 3;
+
+var AUDIO_QUAL_KBPS = function(q){
+  return q === 'saver' ? 64 : q === 'high' ? 256 : 128;
+};
+
+var PROVIDER_LABEL = { piped: 'Piped', invidious: 'Invidious', cobalt: 'Cobalt' };
+
+function hostLabel(h){
+  return String(h || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+}
+
+function ago(ts){
+  if (!ts) return 'just now';
+  var s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 5) return 'just now';
+  if (s < 60) return s + 's ago';
+  var m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+function isPlainUrl(u){
+  return /^https?:\/\//i.test(String(u || ''));
+}
+
+/* Strict-ish media validation for resolved URLs: reject HTML/errors,
+   tolerate unreachable probes (the <audio> element fetches without CORS). */
+async function probeAudioUrl(url, timeout){
+  var host = '';
+  try { host = new URL(url).host; } catch (e) { throw new Error('bad audio URL'); }
+  var ctrl = new AbortController();
+  var timer = setTimeout(function(){ ctrl.abort(); }, timeout || 6000);
+  try {
+    var res = await fetch(url, { headers: { 'Range': 'bytes=0-8191' }, signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    if (!res || !res.ok) return { ok: true, known: false };
+    var ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (/text\/html|application\/json|javascript/.test(ct)) throw new Error('not media (' + (ct || 'unknown type') + ')');
+    if (/^audio\//.test(ct)) return { ok: true, known: true };
+    try {
+      var rdr = res.body && res.body.getReader ? res.body.getReader() : null;
+      if (rdr){
+        var got = await Promise.race([rdr.read(), new Promise(function(res2){ setTimeout(function(){ res2({ done: true }); }, 2500); })]);
+        try { rdr.cancel(); } catch (e) {}
+        if (got && got.value && got.value.byteLength >= 4){
+          var b = new Uint8Array(got.value);
+          var isMedia =
+            (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) ||
+            (b[0] === 0xFF && (b[1] & 0xE0) === 0xE0) ||
+            (b[0] === 0x4F && b[1] === 0x67 && b[2] === 0x67) ||
+            (b[0] === 0x1A && b[1] === 0x45 && b[2] === 0xDF && b[3] === 0xA3) ||
+            (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) ||
+            (b[0] === 0x66 && b[1] === 0x4C && b[2] === 0x61 && b[3] === 0x43) ||
+            (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46);
+          if (isMedia) return { ok: true, known: true };
+        }
+      }
+    } catch (e) { /* probe read failed — fall through to heuristic */ }
+    return { ok: true, known: false };
+  } catch (e) {
+    clearTimeout(timer);
+    if (e && e.message && /not media/.test(e.message)) throw e;
+    /* Network/CORS/probe failure: <audio> does not need CORS, so direct
+       audio CDN URLs are still trustworthy. */
+    if (/^https?:\/\//i.test(url)) return { ok: true, known: false };
+    throw e;
+  }
+}
+
+function pickAudio(list, kbps){
+  if (!list || !list.length) return null;
+  list.sort(function(a, b){ return a.bitrate - b.bitrate; });
+  var pick = null;
+  for (var i = 0; i < list.length; i++){ if (list[i].bitrate <= kbps) pick = list[i]; }
+  return pick || list[0];
+}
+
+function absUrl(base, u){
+  u = String(u || '').trim();
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u;
+  return base.replace(/\/+$/, '') + '/' + u.replace(/^\/+/, '');
+}
+
+/* ---------- piped (current provider, now strict) ---------- */
+async function pipedResolve(videoId, kbps){
+  /* Keep the Piped chain short: the working host first, then a few official
+     ones — this provider has fallbacks behind it, so no need to brute-force
+     all fifteen. */
+  var hosts = [];
+  if (Backend.working) hosts.push(Backend.working);
+  DEFAULT_INSTANCES.slice(0, 2).forEach(function(h){ if (hosts.indexOf(h) < 0) hosts.push(h); });
+  var d = await Backend.get('/streams/' + videoId, 7000, hosts.length ? hosts : undefined);
+  var list = (d.audioStreams || []).map(function(a){
+    var br = Number(a.bitrate) || 0;
+    if (br > 10000) br = Math.round(br / 1000);
+    return { url: a.url, bitrate: br };
+  }).filter(function(a){ return a.url; });
+  if (!list.length) throw new Error('no audio streams');
+  var pick = pickAudio(list, kbps);
+  var sniff = await probeAudioUrl(pick.url, 6000);
+  if (!sniff.ok) throw new Error('audio URL failed validation');
+  return { url: pick.url, host: Backend.working || '', provider: 'piped', bitrate: pick.bitrate };
+}
+
+/* ---------- invidious (alternate provider) ---------- */
+async function invidiousResolve(videoId, kbps){
+  var errs = [];
+  for (var i = 0; i < Math.min(INVIDIOUS_INSTANCES.length, 3); i++){
+    var host = INVIDIOUS_INSTANCES[i];
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+    try {
+      var res = await fetch(host + '/api/v1/videos/' + videoId + '?local=true', { signal: ctrl.signal, cache: 'no-store' });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var d = await res.json();
+      var list = (d.adaptiveFormats || []).map(function(a){
+        if (!a || !a.url) return null;
+        var br = Number(a.bitrate) || 0;
+        if (br > 10000) br = Math.round(br / 1000);
+        return { url: absUrl(host, a.url), bitrate: br, type: a.type || '' };
+      }).filter(function(a){ return a && /^audio\//.test(a.type) && a.url; });
+      if (!list.length) throw new Error('no audio adaptiveFormats');
+      var pick = pickAudio(list, kbps);
+      var sniff = await probeAudioUrl(pick.url, 6000);
+      if (!sniff.ok) throw new Error('audio URL failed validation');
+      return { url: pick.url, host: host, provider: 'invidious', bitrate: pick.bitrate };
+    } catch (e) {
+      clearTimeout(timer);
+      errs.push(host.replace(/^https?:\/\//,'') + ' → ' + (e && e.message ? e.message : 'failed'));
+    }
+  }
+  throw new Error(errs.join(' · ') || 'no invidious instance worked');
+}
+
+/* ---------- cobalt (fourth provider: streams back from instance) ---------- */
+async function getCobaltInstances(){
+  try {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 6000);
+    var res = await fetch(COBALT_DIRECTORY, { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var list = await res.json();
+    if (!Array.isArray(list)) throw new Error('unexpected directory shape');
+    var good = list.filter(function(x){
+      if (!x || !x.api || x.online !== true) return false;
+      if (x.info && x.info.auth === true) return false;
+      if (x.services && x.services.youtube !== true) return false;
+      return true;
+    });
+    good.sort(function(a, b){ return (Number(b.score) || 0) - (Number(a.score) || 0); });
+    var hosts = good.map(function(x){ return 'https://' + (x.api || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''); }).filter(isPlainUrl);
+    if (hosts.length) return hosts.slice(0, COBALT_MAX_INSTANCES);
+  } catch (e) { /* fall through to hardcoded list */ }
+  return COBALT_FALLBACK_INSTANCES.slice();
+}
+
+async function cobaltResolve(videoId, kbps){
+  var hosts = await getCobaltInstances();
+  var errs = [];
+  for (var i = 0; i < hosts.length; i++){
+    var host = hosts[i];
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 10000);
+    try {
+      var res = await fetch(host, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: ctrl.signal, cache: 'no-store',
+        body: JSON.stringify({
+          url: 'https://www.youtube.com/watch?v=' + videoId,
+          downloadMode: 'audio',
+          audioFormat: 'opus',
+          audioBitrate: kbps
+        })
+      });
+      clearTimeout(timer);
+      var d = await res.json().catch(function(){ return null; });
+      var url = d && (d.status === 'tunnel' || d.status === 'redirect' || d.status === 'ok') ? d.url : (d && d.url);
+      if (!url || !isPlainUrl(url)){
+        var why = d && (d.error || d.status || d.code) ? (d.error || d.status || d.code) : ('HTTP ' + (res.status || '?'));
+        throw new Error(String(why).slice(0, 140));
+      }
+      var sniff = await probeAudioUrl(url, 6000);
+      if (!sniff.ok) throw new Error('audio URL failed validation');
+      return { url: url, host: host, provider: 'cobalt', bitrate: kbps };
+    } catch (e) {
+      clearTimeout(timer);
+      errs.push(host.replace(/^https?:\/\//,'') + ' → ' + (e && e.message ? e.message : 'failed'));
+    }
+  }
+  throw new Error(errs.join(' · ') || 'no cobalt instance worked');
+}
 
 var KBPS = { saver:48, normal:128, high:256 };
 var QUAL_LABEL = { saver:'Data saver', normal:'Normal', high:'High', auto:'Auto' };
@@ -853,7 +1068,7 @@ var state = {
   settings:{ streamQuality:'auto', downloadQuality:'high', downloadMode:'audio',
              strictness:'balanced', capMB:512, instance:'', apiKey:'' },
   queue:[], idx:-1, playing:false, progress:0, shuffle:false, repeat:false,
-  net:'unknown', installDismissed:false, canInstall:false, ready:false
+  net:'unknown', installDismissed:false, canInstall:false, ready:false, audioSource:null
 };
 
 var TRACK_MAP = {};
@@ -913,8 +1128,8 @@ var Backend = {
     return list;
   },
 
-  get: async function(path, timeout){
-    var hosts = this.hosts();
+  get: async function(path, timeout, hostsOverride){
+    var hosts = hostsOverride || this.hosts();
     if (this.working){
       hosts = [this.working].concat(hosts.filter(function(h){ return h !== Backend.working; }));
     }
@@ -1034,19 +1249,8 @@ var Backend = {
     };
   },
 
-  bestAudio: async function(videoId, targetKbps){
-    var d = await this.get('/streams/' + videoId, 12000);
-    var list = (d.audioStreams || []).map(function(a){
-      var br = Number(a.bitrate) || 0;
-      if (br > 10000) br = Math.round(br / 1000);
-      return { url: a.url, bitrate: br, mime: a.mimeType || '', codec: a.codec || '' };
-    }).filter(function(a){ return a.url; });
-    if (!list.length) throw new Error('no audio streams (instance blocked by YouTube)');
-    list.sort(function(a,b){ return a.bitrate - b.bitrate; });
-    var pick = null;
-    for (var i = 0; i < list.length; i++){ if (list[i].bitrate <= targetKbps) pick = list[i]; }
-    return pick || list[0];
-  },
+  /* audio resolution lives in the hybrid chain below:
+     piped -> invidious -> cobalt (first validated success wins) */
 
   probe: async function(){
     try {
@@ -1062,9 +1266,33 @@ var Backend = {
   }
 };
 
+/* ---------- fallback chain: piped -> invidious -> cobalt ---------- */
+Backend.resolveAudio = async function(videoId, kbps){
+  if (!videoId) throw new Error('no video id');
+  var start = Date.now();
+  var budget = 26000;
+  var errs = [];
+  var providers = [
+    { name: 'Piped',     fn: pipedResolve },
+    { name: 'Invidious', fn: invidiousResolve },
+    { name: 'Cobalt',    fn: cobaltResolve }
+  ];
+  for (var i = 0; i < providers.length; i++){
+    if (Date.now() - start > budget) break;
+    try {
+      var got = await providers[i].fn(videoId, kbps);
+      if (got && got.url) return got;
+      errs.push(providers[i].name + ': empty result');
+    } catch (e) {
+      errs.push(providers[i].name + ': ' + (e && e.message ? e.message : 'failed'));
+    }
+  }
+  throw new Error(errs.join(' · ') || 'all audio providers failed');
+};
+
 /* ------------------------------ player ------------------------------
-   Audio-only playback: streams the release's audio straight from the
-   Piped instance through a plain <audio> element. No YouTube iframe,
+   Audio-only playback: streams the release's audio from the resolved
+   audio source through a plain <audio> element. No YouTube iframe,
    no ads — only clean audio. */
 var Player = {
   el: null, blobUrl: null, useBlob: false, seq: 0,
@@ -1191,14 +1419,16 @@ async function loadAndPlay(t){
     : state.settings.streamQuality === 'high' ? 256
     : 128;
   try {
-    var got = await Backend.bestAudio(t.id, kbps);
+    var got = await Backend.resolveAudio(t.id, kbps);
     if (seq !== Player.seq) return; /* superseded */
+    state.audioSource = { name: got.provider, host: got.host, bitrate: got.bitrate, at: Date.now() };
     Player.playUrl(got.url);
   } catch(e){
     if (seq !== Player.seq) return;
     state.playing = false;
+    state.audioSource = null;
     var t2 = currentTrack();
-    if (t2) toast('Couldn’t load audio for “' + t2.title + '” — try another instance in Settings');
+    if (t2) toast('Couldn’t load audio for “' + t2.title + '” — ' + (e && e.message ? e.message.split('·')[0] : 'audio unavailable'));
     syncPlayer();
   }
 }
@@ -1408,7 +1638,8 @@ async function downloadTrack(id){
   if (state.settings.downloadMode === 'audio' && t.source !== 'demo'){
     toast('Looking for an audio stream…');
     try {
-      var got = await Backend.bestAudio(id, kbps);
+      var got = await Backend.resolveAudio(id, kbps);
+      state.audioSource = { name: got.provider, host: got.host, bitrate: got.bitrate, at: Date.now() };
       var res = await fetch(got.url);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var blob = await res.blob();
@@ -1817,6 +2048,16 @@ function viewSettings(){
     '<div class="hint">Not required. Only used if every public instance is down.</div></div>' +
     '</div></div>';
 
+  html += '<div class="setsec"><h3>Stream backend</h3><div class="card-box">' +
+    '<div class="setrow"><div><div class="lbl">Provider</div>' +
+    '<div class="sub">' + (state.audioSource
+      ? '<b style="color:#cfeedc">' + PROVIDER_LABEL[state.audioSource.name] + '</b> · ' + esc(hostLabel(state.audioSource.host)) + '<br><span style="color:var(--muted2)">resolved ' + ago(state.audioSource.at) + ' · ' + (state.audioSource.bitrate || '—') + ' kbps</span>'
+      : 'Not resolved yet — resolves on first play.') + '</div></div>' +
+    '<button class="chip" data-act="audio-test">Test now</button></div>' +
+    '<div class="inputrow"><div class="hint">Piped → Invidious → Cobalt — the first validated source wins. ' +
+    'Search stays on Piped; audio resolution uses the full chain. These public services see your track IDs and titles. If any one fails, the app falls back to the next.</div></div>' +
+    '</div></div>';
+
   html += '<div class="setsec"><h3>Download behaviour</h3><div class="card-box">' +
     '<div class="setrow col"><div><div class="lbl">What “Download” does</div>' +
     '<div class="sub">Offline audio needs an instance that YouTube still lets decrypt — today most can’t, so it falls back to a library save automatically.</div></div>' +
@@ -2101,6 +2342,22 @@ document.addEventListener('click', function(e){
       }
       break;
     case 'dismiss-install': state.installDismissed = true; LS.set('sonora.installDismissed', true); render(); break;
+    case 'audio-test': {
+      var t3 = currentTrack();
+      if (!t3){ toast('Play something first, then Test now'); break; }
+      var kbps3 = AUDIO_QUAL_KBPS(state.settings.streamQuality === 'auto' ? 'normal' : state.settings.streamQuality);
+      toast('Testing stream…');
+      Backend.resolveAudio(t3.id, kbps3).then(function(got){
+        state.audioSource = { name: got.provider, host: got.host, bitrate: got.bitrate, at: Date.now() };
+        toast('Audio: ' + PROVIDER_LABEL[got.provider] + ' · ' + hostLabel(got.host) + ' · ' + got.bitrate + ' kbps');
+        render();
+      }).catch(function(e){
+        state.audioSource = null;
+        toast('No audio source — ' + (e && e.message ? e.message.split('·')[0].trim() : 'all providers failed'));
+        render();
+      });
+      break;
+    }
     case 'lyrics-toggle': {
       var curTrack = currentTrack();
       if (!curTrack){ toast('Play something first'); break; }
