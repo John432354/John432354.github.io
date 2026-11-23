@@ -763,6 +763,13 @@ function hostLabel(h){
   return String(h || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
 }
 
+/* Full aggregated provider error, capped so toasts stay readable. */
+function fmtResolveError(e){
+  var m = e && e.message ? String(e.message) : 'audio unavailable';
+  if (m.length > 220) m = m.slice(0, 220).replace(/ ·\s*$/, '') + '…';
+  return m;
+}
+
 function ago(ts){
   if (!ts) return 'just now';
   var s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -931,7 +938,7 @@ function absUrl(base, u){
 
 /* ---------- invidious (instance-side /videoplayback proxy) ---------- */
 async function invidiousResolve(videoId, kbps){
-  var hosts = await Backend._listHosts();
+  var hosts = (await Backend._listHosts()).filter(function(h){ return !Backend._deadHosts[h]; });
   var errs = [];
   for (var i = 0; i < Math.min(hosts.length, 3); i++){
     var host = hosts[i];
@@ -958,6 +965,7 @@ async function invidiousResolve(videoId, kbps){
     } catch (e) {
       clearTimeout(timer);
       errs.push(host.replace(/^https?:\/\//,'') + ' → ' + (e && e.message ? e.message : 'failed'));
+      if (/HTTP [4]\d\d/.test(String(e && e.message || ''))) Backend._deadHosts[host] = true;  /* 4xx = instance itself is down/gone for the session */
     }
   }
   throw new Error(errs.join(' · ') || 'no invidious instance worked');
@@ -965,7 +973,7 @@ async function invidiousResolve(videoId, kbps){
 
 /* ---------- cobalt (instance streams back the audio) ---------- */
 async function cobaltResolve(videoId, kbps){
-  var hosts = await cobaltLiveList();
+  var hosts = (await cobaltLiveList()).filter(function(h){ return !Backend._deadHosts[h]; });
   var errs = [];
   for (var i = 0; i < Math.min(hosts.length, COBALT_MAX_INSTANCES); i++){
     var host = hosts[i];
@@ -996,6 +1004,7 @@ async function cobaltResolve(videoId, kbps){
     } catch (e) {
       clearTimeout(timer);
       errs.push(host.replace(/^https?:\/\//,'') + ' → ' + (e && e.message ? e.message : 'failed'));
+      if (/HTTP [4]\d\d/.test(String(e && e.message || ''))) Backend._deadHosts[host] = true;
     }
   }
   throw new Error(errs.join(' · ') || 'no cobalt instance worked');
@@ -1152,6 +1161,7 @@ var Backend = {
   working: null,
   lastError: '',
   probeDone: false,
+  _deadHosts: {},
 
   hosts: function(){
     var custom = String(state.settings.instance || '').trim().replace(/\/+$/, '');
@@ -1170,8 +1180,8 @@ var Backend = {
     if (!live || !live.length) live = INVIDIOUS_FALLBACK.slice();
     var out = [];
     if (custom) out.push(custom);
-    live.forEach(function(h){ if (out.indexOf(h) < 0) out.push(h); });
-    INVIDIOUS_FALLBACK.forEach(function(h){ if (out.indexOf(h) < 0) out.push(h); });
+    live.forEach(function(h){ if (out.indexOf(h) < 0 && !Backend._deadHosts[h]) out.push(h); });
+    INVIDIOUS_FALLBACK.forEach(function(h){ if (out.indexOf(h) < 0 && !Backend._deadHosts[h]) out.push(h); });
     if (out.length > 8) out = out.slice(0, 8);
     return out;
   },
@@ -1179,7 +1189,7 @@ var Backend = {
   get: async function(path, timeout, hostsOverride){
     var hosts = hostsOverride || await this._listHosts();
     if (!hosts || !hosts.length) throw new Error('no Invidious instances available');
-    if (this.working){
+    if (this.working && !this._deadHosts[this.working]){
       hosts = [this.working].concat(hosts.filter(function(h){ return h !== Backend.working; }));
     }
     var errs = [];
@@ -1515,7 +1525,7 @@ async function loadAndPlay(t){
     state.playing = false;
     state.audioSource = null;
     var t2 = currentTrack();
-    if (t2) toast('Couldn’t load audio for “' + t2.title + '” — ' + (e && e.message ? e.message.split('·')[0] : 'audio unavailable'));
+    if (t2) toast('Couldn’t load audio for “' + t2.title + '” — ' + fmtResolveError(e));
     syncPlayer();
   }
 }
@@ -1802,7 +1812,7 @@ async function downloadAudioFile(id){
     setTimeout(function(){ URL.revokeObjectURL(url); }, 6000);
     toast('Audio saved as .' + ext + ' · ' + fmtMB(blob.size) + ' · ' + (PROVIDER_LABEL[got.provider] || got.provider));
   } catch(e){
-    toast('Audio download failed — ' + (e && e.message ? e.message.split(' · ')[0].trim() : 'all providers failed'));
+    toast('Audio download failed — ' + fmtResolveError(e));
   }
 }
 
@@ -2487,7 +2497,7 @@ document.addEventListener('click', function(e){
         render();
       }).catch(function(e){
         state.audioSource = null;
-        toast('No audio source — ' + (e && e.message ? e.message.split('·')[0].trim() : 'all providers failed'));
+        toast('No audio source — ' + fmtResolveError(e));
         render();
       });
       break;
