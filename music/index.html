@@ -761,7 +761,7 @@ var AUDIO_QUAL_KBPS = function(q){
   return q === 'saver' ? 48 : q === 'high' ? 256 : 128;   /* 48 to match KBPS + the 48k label */
 };
 
-var PROVIDER_LABEL = { invidious: 'Invidious', cobalt: 'Cobalt' };
+var PROVIDER_LABEL = { invidious: 'Invidious', cobalt: 'Cobalt', official: 'Official player' };
 
 function hostLabel(h){
   return String(h || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
@@ -961,14 +961,14 @@ async function invidiousResolve(videoId, kbps){
         var br = Number(a.bitrate) || 0;
         if (br > 10000) br = Math.round(br / 1000);
         var type = String(a.type || a.mimeType || '').toLowerCase();
-        var itag = Number(a.itag);
         /* Some instances ship adaptiveFormats with no type/mimeType at all
            (verified on invidious.ritoge.com, 2026-11-22: 26 formats, every one
            with mimeType null). Classify by itag so those hosts still work. */
+        var itag = Number(a.itag);
         var isAudio = /^audio\//.test(type) || (!type && AUDIO_ITAG[itag]) || (AUDIO_ITAG[itag] && !/^video\//.test(type));
         if (!isAudio) return null;
         if (!type) type = (itag === 139 || itag === 140 || itag === 141) ? 'audio/mp4' : 'audio/webm';
-        return { url: absUrl(host, a.url), bitrate: br, type: type };
+        return { url: absUrl(host, a.url), bitrate: br, type: type, itag: itag };
       }).filter(function(a){ return a && a.url; });
       if (!list.length) throw new Error('no audio streams');
       var pick = pickAudio(list, kbps);
@@ -1139,7 +1139,7 @@ var state = {
   query:'', searchMode:'songs',
   results:[], albumResults:[], hidden:[], searching:false, searchError:null,
   settings:{ streamQuality:'auto', downloadQuality:'high', downloadMode:'audio',
-             strictness:'balanced', capMB:512, instance:'' },
+             strictness:'balanced', capMB:512, instance:'', engine:'auto' },
   queue:[], idx:-1, playing:false, progress:0, shuffle:false, repeat:false,
   net:'unknown', installDismissed:false, canInstall:false, ready:false, audioSource:null
 };
@@ -1193,7 +1193,6 @@ var Backend = {
   lastError: '',
   probeDone: false,
   _deadHosts: {},
-  _cobaltGated: false,
 
   hosts: function(){
     var custom = String(state.settings.instance || '').trim().replace(/\/+$/, '');
@@ -1438,10 +1437,160 @@ Backend.resolveAudio = async function(videoId, kbps){
   throw new Error(errs.join(' · ') || 'All audio providers failed');
 };
 
+
+/* ------------------------- official player (fallback) -------------------------
+   Measured 2026-11-22 from a real browser (Chrome 158) against the live network:
+
+     • Invidious search works and is CORS-friendly on both healthy instances.
+     • /api/v1/videos/<id>?local=true hands back instance-proxied audio
+       (206, content-type audio/mp4, Access-Control-Allow-Origin: *) — but only
+       for a small minority of tracks: 1 of 10 sampled resolved, and every
+       mainstream music upload 404'd "Video unavailable".
+     • Every reachable Cobalt instance answers error.api.auth.jwt.missing
+       (Turnstile-backed session required).
+
+   So a direct stream cannot be guaranteed for an arbitrary song. When one
+   cannot be resolved, playback falls back to the official embedded player:
+   audio only, the frame is offscreen, no keys, no backend, no ads injected by
+   us. The catch, and the UI says it plainly: that path cannot be downloaded.
+
+   Everything else in the app is unchanged — search, playlists, albums,
+   downloads, install. */
+var OfficialPlayer = {
+  yt: null, loading: false, apiReady: false, failed: false,
+  active: false, videoId: null, startedAt: 0, hostId: 'officialHost',
+
+  ensureHost: function(){
+    var host = document.getElementById(this.hostId);
+    if (!host){
+      host = document.createElement('div');
+      host.id = this.hostId;
+      host.setAttribute('aria-hidden', 'true');
+      host.style.cssText = 'position:fixed;left:-9999px;top:0;width:180px;height:100px;overflow:hidden;opacity:.02;pointer-events:none';
+      document.body.appendChild(host);
+    }
+    if (!document.getElementById('officialFrame')){
+      var inner = document.createElement('div');
+      inner.id = 'officialFrame';
+      host.appendChild(inner);
+    }
+    return true;
+  },
+
+  loadApi: function(){
+    if (this.apiReady || this.loading) return;
+    this.loading = true;
+    var s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    s.onerror = function(){ OfficialPlayer.failed = true; };
+    document.head.appendChild(s);
+    window.onYouTubeIframeAPIReady = function(){
+      OfficialPlayer.apiReady = true;
+      OfficialPlayer.ensurePlayer();
+    };
+  },
+
+  ensurePlayer: function(){
+    if (this.yt || !window.YT || !window.YT.Player) return;
+    try {
+      this.yt = new window.YT.Player('officialFrame', {
+        height: '100', width: '180',
+        playerVars: { autoplay:0, controls:0, disablekb:1, playsinline:1, rel:0, iv_load_policy:3, origin: location.origin },
+        events: {
+          onReady: function(){ try { OfficialPlayer.yt.setVolume(100); } catch(e){} },
+          onStateChange: function(ev){
+            if (ev.data === 0){ if (state.playing) step(1); }
+            else if (ev.data === 1){
+              var d = OfficialPlayer.duration(), cur = currentTrack();
+              if (d > 0 && cur && !cur.dur){ cur.dur = Math.round(d); paintProgress(); }
+              state.playing = true; syncPlayer();
+            }
+            else if (ev.data === 2){ state.playing = false; syncPlayer(); }
+            else if (ev.data === 3){
+              var d2 = OfficialPlayer.duration(), cur2 = currentTrack();
+              if (d2 > 0 && cur2 && !cur2.dur){ cur2.dur = Math.round(d2); paintProgress(); }
+            }
+          },
+          onError: function(ev){
+            OfficialPlayer.active = false;
+            state.playing = false;
+            toast('Official player could not play this track (' + ev.data + ')');
+            syncPlayer();
+          }
+        }
+      });
+    } catch(e){ this.failed = true; }
+  },
+
+  play: function(videoId){
+    var self = this;
+    this.active = true;
+    this.videoId = videoId;
+    this.startedAt = Date.now();
+    this.ensureHost();
+    if (!this.apiReady) this.loadApi();
+    var tries = 0;
+    var wait = setInterval(function(){
+      tries++;
+      self.ensureHost();
+      self.ensurePlayer();
+      if (self.yt && self.yt.loadVideoById){
+        clearInterval(wait);
+        try { self.yt.loadVideoById(videoId); self.yt.playVideo(); } catch(e){}
+      } else if (self.failed || tries > 100){
+        clearInterval(wait);
+        self.active = false;
+        state.playing = false;
+        toast('Could not start the official player — check your connection');
+        syncPlayer();
+      }
+    }, 200);
+  },
+
+  stop: function(){
+    this.active = false; this.videoId = null;
+    if (this.yt && this.yt.stopVideo) try { this.yt.stopVideo(); } catch(e){}
+  },
+  pause: function(){ if (this.yt && this.yt.pauseVideo) try { this.yt.pauseVideo(); } catch(e){} },
+  resume: function(){ if (this.yt && this.yt.playVideo) try { this.yt.playVideo(); } catch(e){} },
+  seek: function(secs){
+    if (this.yt && this.yt.seekTo) try { this.yt.seekTo(secs, true); } catch(e){}
+  },
+  position: function(){
+    if (this.yt && this.yt.getCurrentTime){
+      try {
+        var pos = this.yt.getCurrentTime();
+        return (typeof pos === 'number' && !isNaN(pos)) ? pos : null;
+      } catch(e){}
+    }
+    return null;
+  },
+  duration: function(){
+    if (this.yt && this.yt.getDuration){
+      try {
+        var d = this.yt.getDuration();
+        return (typeof d === 'number' && isFinite(d) && d > 0) ? d : 0;
+      } catch(e){}
+    }
+    return 0;
+  }
+};
+
+/* Tracks that arrive without a duration (pasted links, some search hits) get
+   their length from the player itself, so the seek bar and the progress maths
+   work the same on both engines. */
+function trackDur(t){
+  if (!t) return 0;
+  if (t.dur) return t.dur;
+  var d = OfficialPlayer.duration();
+  if (d > 0){ t.dur = Math.round(d); return t.dur; }
+  return 0;
+}
+
 /* ------------------------------ player ------------------------------
-   Audio-only playback: streams the release's audio from the resolved
-   audio source through a plain <audio> element. No YouTube iframe,
-   no ads — only clean audio. */
+   Audio-only playback. Preferred path: the resolved stream through a plain
+   <audio> element (downloadable, plays offline). Fallback: the official
+   embedded player in OfficialPlayer above, when no stream can be resolved. */
 var Player = {
   el: null, blobUrl: null, useBlob: false, seq: 0,
 
@@ -1468,6 +1617,7 @@ var Player = {
   },
 
   stop: function(){
+    OfficialPlayer.stop();
     this.seq++;
     this._playSeq = 0;
     if (this.el){
@@ -1498,18 +1648,26 @@ var Player = {
     el.play().catch(function(){});
   },
 
-  pause: function(){ var el = this.ensureEl(); if (el) try { el.pause(); } catch(e){} },
-  resume: function(){ var el = this.ensureEl(); if (el) try { el.play().catch(function(){}); } catch(e){} },
+  pause: function(){
+    if (OfficialPlayer.active){ OfficialPlayer.pause(); return; }
+    var el = this.ensureEl(); if (el) try { el.pause(); } catch(e){}
+  },
+  resume: function(){
+    if (OfficialPlayer.active){ OfficialPlayer.resume(); return; }
+    var el = this.ensureEl(); if (el) try { el.play().catch(function(){}); } catch(e){}
+  },
 
   seek: function(pct){
     var t = currentTrack(); if (!t) return;
-    var secs = (pct/100) * (t.dur || 0);
+    var secs = (pct/100) * trackDur(t);
+    if (OfficialPlayer.active){ OfficialPlayer.seek(secs); state.progress = secs; return; }
     var el = this.ensureEl();
     if (el && el.src){ try { el.currentTime = secs; } catch(e){} }
     state.progress = secs;
   },
 
   position: function(){
+    if (OfficialPlayer.active) return OfficialPlayer.position();
     var el = this.ensureEl();
     if (el && el.src){
       try { return el.currentTime || 0; } catch(e){}
@@ -1573,9 +1731,20 @@ async function loadAndPlay(t){
     Player.playUrl(got.url);
   } catch(e){
     if (seq !== Player.seq) return;
+    var t2 = currentTrack();
+    /* No direct stream for this track. Unless the user pinned Direct-only,
+       play it through the official embedded player instead of failing. */
+    if (state.settings.engine !== 'direct' && t2 && t2.id){
+      state.lastResolveError = fmtResolveError(e);
+      state.audioSource = { name: 'official', host: '', bitrate: null, at: Date.now() };
+      OfficialPlayer.play(t2.id);
+      state.playing = true;
+      toast('No public audio stream for this track — playing it on the official player');
+      syncPlayer();
+      return;
+    }
     state.playing = false;
     state.audioSource = null;
-    var t2 = currentTrack();
     if (t2) toast('Couldn’t load audio for “' + t2.title + '” — ' + fmtResolveError(e));
     syncPlayer();
   }
@@ -1633,7 +1802,8 @@ function startTicker(){
       watchdog(pos);
     } else {
       state.progress += 0.5;
-      if (t.dur && state.progress >= t.dur) { step(1); return; }
+      var td = trackDur(t);
+      if (td && state.progress >= td) { step(1); return; }
     }
     paintProgress();
   }, 500);
@@ -1652,7 +1822,8 @@ function watchdog(pos){
 function paintProgress(){
   var t = currentTrack();
   if (!t) return;
-  var pct = t.dur ? Math.min(100, (state.progress / t.dur) * 100) : 0;
+  var dur = trackDur(t);
+  var pct = dur ? Math.min(100, (state.progress / dur) * 100) : 0;
   var bar = $('#miniProg'); if (bar) bar.style.width = pct + '%';
   var seek = $('#npSeek');
   if (seek && document.activeElement !== seek) seek.value = pct;
@@ -1682,7 +1853,9 @@ function syncPlayer(){
     $('#npDur').textContent = fmt(t.dur);
     $('#npToggleBtn').innerHTML = state.playing ? ICONS.pause : ICONS.play;
     var dl = downloadOf(t.id);
-    $('#npQual').textContent = (dl && dl.kind === 'audio' ? 'OFFLINE · ' : 'AUDIO · ') +
+    $('#npQual').textContent = (dl && dl.kind === 'audio' ? 'OFFLINE · '
+      : (state.audioSource && state.audioSource.name === 'official') ? 'OFFICIAL PLAYER · '
+      : 'DIRECT AUDIO · ') +
       (QUAL_LABEL[state.settings.streamQuality] || 'Auto').toUpperCase();
     $('#npLike').innerHTML = isLiked(t.id) ? ICONS.heartF : ICONS.heart;
     $('#npLike').style.color = isLiked(t.id) ? 'var(--accent)' : '';
@@ -1866,7 +2039,11 @@ async function downloadAudioFile(id){
     setTimeout(function(){ URL.revokeObjectURL(url); }, 6000);
     toast('Audio saved as .' + ext + ' · ' + fmtMB(blob.size) + ' · ' + (PROVIDER_LABEL[got.provider] || got.provider));
   } catch(e){
-    toast('Audio download failed — ' + fmtResolveError(e));
+    if (state.settings.engine !== 'direct'){
+      toast('No downloadable stream for this track — a file can only be saved when a direct audio stream resolves');
+    } else {
+      toast('Audio download failed — ' + fmtResolveError(e));
+    }
   }
 }
 
@@ -2245,10 +2422,22 @@ function viewSettings(){
     '<div class="hint">Sonora tries public Invidious instances in order. Paste your own if you have one — no account needed.</div></div>' +
     '</div></div>';
 
+  html += '<div class="setsec"><h3>Playback engine</h3><div class="card-box">' +
+    '<div class="setrow col"><div><div class="lbl">How tracks play</div>' +
+    '<div class="sub">Auto tries a real audio stream first (downloadable, works offline) and falls back to the official player when none can be resolved. Measured on 2026-11-22: public instances resolved audio for roughly 1 in 10 sampled tracks, so expect the fallback often.</div></div>' +
+    seg('engine', [['auto','Auto'],['direct','Direct only'],['official','Official only']], st.engine) + '</div>' +
+    '<div class="setrow"><div><div class="lbl">Last engine used</div>' +
+    '<div class="sub">' + (state.audioSource
+      ? (state.audioSource.name === 'official'
+          ? '<b style="color:#ffd79a">Official player</b><br><span style="color:var(--muted2)">no direct stream — ' + esc(state.lastResolveError || 'unavailable') + '</span>'
+          : '<b style="color:#cfeedc">' + PROVIDER_LABEL[state.audioSource.name] + '</b> · ' + esc(hostLabel(state.audioSource.host)) + '<br><span style="color:var(--muted2)">resolved ' + ago(state.audioSource.at) + ' · ' + (state.audioSource.bitrate || '—') + ' kbps</span>')
+      : 'Not resolved yet — resolves on first play.') + '</div></div></div>' +
+    '</div></div>';
+
   html += '<div class="setsec"><h3>Stream backend</h3><div class="card-box">' +
     '<div class="setrow"><div><div class="lbl">Provider</div>' +
     '<div class="sub">' + (state.audioSource
-      ? '<b style="color:#cfeedc">' + PROVIDER_LABEL[state.audioSource.name] + '</b> · ' + esc(hostLabel(state.audioSource.host)) + '<br><span style="color:var(--muted2)">resolved ' + ago(state.audioSource.at) + ' · ' + (state.audioSource.bitrate || '—') + ' kbps</span>'
+      ? '<b style="color:#cfeedc">' + PROVIDER_LABEL[state.audioSource.name] + '</b> · ' + (state.audioSource.host ? esc(hostLabel(state.audioSource.host)) : 'no host') + '<br><span style="color:var(--muted2)">resolved ' + ago(state.audioSource.at) + ' · ' + (state.audioSource.bitrate || '—') + ' kbps</span>'
       : 'Not resolved yet — resolves on first play.') + '</div></div>' +
     '<button class="chip" data-act="audio-test">Test now</button></div>' +
     '<div class="inputrow"><div class="hint">Invidious → Cobalt — the first validated source wins. ' +
@@ -2526,6 +2715,9 @@ document.addEventListener('click', function(e){
       else if (key === 'downloadMode') toast(val === 'audio' ? 'Downloads try real offline audio first' : 'Downloads save to library only');
       else if (key === 'downloadQuality') toast('Audio bitrate: ' + KBPS[val] + ' kbps');
       else if (key === 'capMB') toast('Storage cap: ' + val + ' MB');
+      else if (key === 'engine') toast(val === 'direct' ? 'Direct audio only — playback fails when no stream exists'
+        : val === 'official' ? 'Official player only — always plays, never downloadable'
+        : 'Auto — real stream first, official player as fallback');
       else toast('Streaming preference: ' + (QUAL_LABEL[val] || val));
       render(); if (key === 'strictness' && state.query.trim()) runSearch();
       break;
@@ -2650,8 +2842,7 @@ Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), functi
 
 /* ------------------------------ search + album loaders ------------------------------ */
 /* A pasted YouTube link/ID always resolves to a playable result, even when
-   every instance is unreachable — it can then be played or downloaded via
-   whatever direct source resolves. */
+   every instance is unreachable — the official player needs no backend. */
 function parseYouTubeLink(q){
   var m = String(q || '').trim();
   if (!m || m.length > 200) return '';
@@ -2682,6 +2873,7 @@ async function runSearch(){
     render();
     return;
   }
+
   try {
     if (state.searchMode === 'albums'){
       var a = await Backend.searchAlbums(q);
