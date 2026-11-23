@@ -682,10 +682,11 @@
 /* =====================================================================
    Sonora — YouTube Music client, single file
    ---------------------------------------------------------------------
-   Backend  : public Piped API instances for search (no key, no server,
-              no login) — filter=music_songs returns YouTube Music *songs*,
-              which is the whole point: no music videos.
-   Playback : audio resolution races Piped → Invidious → Cobalt. The first
+   Backend  : public Invidious API instances for search (no key, no server,
+              no login) — /api/v1/search?type=video returns YouTube videos,
+              and music videos are dropped on the way in, which is the whole
+              point: no YouTube iframe, no ads.
+   Playback : audio resolution follows Invidious → Cobalt. The first
               validated source wins (HTML/error responses are rejected), so
               the app degrades gracefully when one or more providers are
               rate-limited. No YouTube iframe, no ads, no external players.
@@ -740,10 +741,6 @@ var DIRECTORY_CACHE = {};
 var DIRECTORY_TTL = 15 * 60 * 1000;
 var DIRECTORY_TTL_FAIL = 60 * 1000;
 
-/* Piped — public instances (jayxdcode/piped-instances minimal.json, isLatest=true). */
-var PIPED_DIRECTORY = 'https://raw.githubusercontent.com/jayxdcode/piped-instances/main/public/minimal.json';
-var PIPED_FALLBACK = ['https://api.piped.private.coffee', 'https://pipedapi.ducks.party'];
-
 /* Invidious — instances that actually returned stream metadata (train233kei/invidious-watch). */
 var INVIDIOUS_DIRECTORY = 'https://raw.githubusercontent.com/train233kei/invidious-watch/main/instances.json';
 var INVIDIOUS_FALLBACK = ['https://iv.catgirl.cloud', 'https://invidious.ritoge.com'];
@@ -760,7 +757,7 @@ var AUDIO_QUAL_KBPS = function(q){
   return q === 'saver' ? 64 : q === 'high' ? 256 : 128;
 };
 
-var PROVIDER_LABEL = { piped: 'Piped', invidious: 'Invidious', cobalt: 'Cobalt' };
+var PROVIDER_LABEL = { invidious: 'Invidious', cobalt: 'Cobalt' };
 
 function hostLabel(h){
   return String(h || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
@@ -798,23 +795,6 @@ async function directoryFetch(urls, timeout){
     }
   }
   throw new Error(errs.join(' · ') || 'directory unreachable');
-}
-
-function pipedListFromText(txt){
-  var d;
-  try { d = JSON.parse(txt); } catch (e) { return []; }
-  var arr = Array.isArray(d) ? d : (d && d.instances);
-  if (!Array.isArray(arr)) return [];
-  var out = [];
-  for (var i = 0; i < arr.length; i++){
-    var x = arr[i] || {};
-    if (x.isLatest === false) continue;
-    var u = String(x.api_url || x.apiUrl || x.api || x.url || '').trim();
-    if (!isPlainUrl(u)) continue;
-    u = u.replace(/\/+$/, '');
-    if (out.indexOf(u) < 0) out.push(u);
-  }
-  return out;
 }
 
 function invidiousListFromText(txt){
@@ -885,7 +865,6 @@ async function providerList(kind, urls, fallback, parse){
   return fb;
 }
 
-function pipedLiveList(){ return providerList('piped', [PIPED_DIRECTORY], PIPED_FALLBACK, pipedListFromText); }
 function invidiousLiveList(){ return providerList('invidious', [INVIDIOUS_DIRECTORY], INVIDIOUS_FALLBACK, invidiousListFromText); }
 function cobaltLiveList(){ return providerList('cobalt', COBALT_DIRECTORIES, COBALT_FALLBACK, cobaltListFromText); }
 
@@ -950,30 +929,9 @@ function absUrl(base, u){
   return base.replace(/\/+$/, '') + '/' + u.replace(/^\/+/, '');
 }
 
-/* ---------- piped (direct URLs; <audio> plays them without CORS) ---------- */
-async function pipedResolve(videoId, kbps){
-  var hosts = [];
-  if (Backend.working) hosts.push(Backend.working);
-  var live = await pipedLiveList();
-  live.forEach(function(h){ if (hosts.indexOf(h) < 0) hosts.push(h); });
-  hosts = hosts.slice(0, 3);
-  var d = await Backend.get('/streams/' + videoId, 7000, hosts.length ? hosts : undefined);
-  var list = (d.audioStreams || []).map(function(a){
-    if (!a || !a.url) return null;
-    var br = Number(a.bitrate) || 0;
-    if (br > 10000) br = Math.round(br / 1000);
-    return { url: a.url, bitrate: br };
-  }).filter(function(a){ return a && a.url; });
-  if (!list.length) throw new Error('no audio streams');
-  var pick = pickAudio(list, kbps);
-  var sniff = await probeAudioUrl(pick.url, 6000);
-  if (!sniff.ok) throw new Error('audio URL failed validation');
-  return { url: pick.url, host: Backend.working || hosts[0] || '', provider: 'piped', bitrate: pick.bitrate };
-}
-
 /* ---------- invidious (instance-side /videoplayback proxy) ---------- */
 async function invidiousResolve(videoId, kbps){
-  var hosts = await invidiousLiveList();
+  var hosts = await Backend._listHosts();
   var errs = [];
   for (var i = 0; i < Math.min(hosts.length, 3); i++){
     var host = hosts[i];
@@ -1021,7 +979,7 @@ async function cobaltResolve(videoId, kbps){
         body: JSON.stringify({
           url: 'https://www.youtube.com/watch?v=' + videoId,
           downloadMode: 'audio',
-          audioFormat: 'opus',
+          audioFormat: 'mp3',
           audioBitrate: kbps
         })
       });
@@ -1141,7 +1099,7 @@ var state = {
   query:'', searchMode:'songs',
   results:[], albumResults:[], hidden:[], searching:false, searchError:null,
   settings:{ streamQuality:'auto', downloadQuality:'high', downloadMode:'audio',
-             strictness:'balanced', capMB:512, instance:'', apiKey:'' },
+             strictness:'balanced', capMB:512, instance:'' },
   queue:[], idx:-1, playing:false, progress:0, shuffle:false, repeat:false,
   net:'unknown', installDismissed:false, canInstall:false, ready:false, audioSource:null
 };
@@ -1199,28 +1157,28 @@ var Backend = {
     var custom = String(state.settings.instance || '').trim().replace(/\/+$/, '');
     if (custom && !/^https?:\/\//i.test(custom)) custom = 'https://' + custom;
     var list = custom ? [custom] : [];
-    PIPED_FALLBACK.forEach(function(h){ if (list.indexOf(h) < 0) list.push(h); });
+    INVIDIOUS_FALLBACK.forEach(function(h){ if (list.indexOf(h) < 0) list.push(h); });
     return list;
   },
 
-  /* live Piped instances (cached) win over the fallback; custom instance stays first */
+  /* live Invidious instances (cached) win over the fallback; custom instance stays first */
   _listHosts: async function(){
     var custom = String(state.settings.instance || '').trim().replace(/\/+$/, '');
     if (custom && !/^https?:\/\//i.test(custom)) custom = 'https://' + custom;
     var live = [];
-    try { live = await pipedLiveList(); } catch (e) {}
-    if (!live || !live.length) live = PIPED_FALLBACK.slice();
+    try { live = await invidiousLiveList(); } catch (e) {}
+    if (!live || !live.length) live = INVIDIOUS_FALLBACK.slice();
     var out = [];
     if (custom) out.push(custom);
     live.forEach(function(h){ if (out.indexOf(h) < 0) out.push(h); });
-    PIPED_FALLBACK.forEach(function(h){ if (out.indexOf(h) < 0) out.push(h); });
+    INVIDIOUS_FALLBACK.forEach(function(h){ if (out.indexOf(h) < 0) out.push(h); });
     if (out.length > 8) out = out.slice(0, 8);
     return out;
   },
 
   get: async function(path, timeout, hostsOverride){
     var hosts = hostsOverride || await this._listHosts();
-    if (!hosts || !hosts.length) throw new Error('no Piped instances available');
+    if (!hosts || !hosts.length) throw new Error('no Invidious instances available');
     if (this.working){
       hosts = [this.working].concat(hosts.filter(function(h){ return h !== Backend.working; }));
     }
@@ -1247,29 +1205,53 @@ var Backend = {
     throw new Error(this.lastError || 'all instances failed');
   },
 
-  videoId: function(url){
-    if (!url) return null;
-    var m = String(url).match(/[?&]v=([\w-]{6,})/) || String(url).match(/([\w-]{11})$/);
-    return m ? m[1] : null;
-  },
-  listId: function(url){
-    if (!url) return null;
-    var m = String(url).match(/[?&]list=([\w-]+)/);
-    return m ? m[1] : null;
+  /* Invidious thumbnails may be relative paths — resolve against the host. */
+  _thumb: function(host, thumbs){
+    var pick = null;
+    if (thumbs && thumbs.length){
+      var rank = { 'maxresdefault': 7, 'standard': 6, 'sddefault': 5, 'default': 4, 'medium': 3, 'small': 2, 'tiny': 1 };
+      var best = -1;
+      for (var i = 0; i < thumbs.length; i++){
+        var t = thumbs[i] || {};
+        var r = rank[t.quality] || 0;
+        if (r > best){ best = r; pick = t; }
+      }
+      if (!pick) pick = thumbs[0];
+    }
+    var url = (pick && pick.url) || (thumbs && thumbs[0] && thumbs[0].url) || '';
+    url = String(url).trim();
+    if (!url) return '';
+    return absUrl(host, url);
   },
 
-  toTrack: function(it){
-    if (!it || it.type !== 'stream') return null;
-    var vid = this.videoId(it.url);
+  /* Invidious video item -> track */
+  toTrack: function(it, host){
+    if (!it || it.type !== 'video') return null;
+    var vid = String(it.videoId || '').trim();
     if (!vid) return null;
     return {
       id: vid,
       title: String(it.title || '').trim(),
-      artist: String(it.uploaderName || '').trim() || 'Unknown artist',
+      artist: String(it.author || '').trim() || 'Unknown artist',
       album: '',
-      dur: Number(it.duration) || 0,
-      thumb: it.thumbnail || ('https://i.ytimg.com/vi/' + vid + '/mqdefault.jpg'),
-      source: 'piped'
+      dur: Number(it.lengthSeconds) || 0,
+      thumb: this._thumb(host, it.videoThumbnails) || ('https://i.ytimg.com/vi/' + vid + '/mqdefault.jpg'),
+      source: 'invidious'
+    };
+  },
+
+  /* Invidious playlist item (search embed OR detail) -> track */
+  _playlistVideo: function(host, it){
+    var vid = String((it && it.videoId) || '').trim();
+    if (!vid) return null;
+    return {
+      id: vid,
+      title: String((it && it.title) || '').trim(),
+      artist: String((it && it.author) || '').trim() || 'Unknown artist',
+      album: '',
+      dur: Number((it && it.lengthSeconds) || 0) || 0,
+      thumb: this._thumb(host, (it && it.videoThumbnails) || []) || ('https://i.ytimg.com/vi/' + vid + '/mqdefault.jpg'),
+      source: 'invidious'
     };
   },
 
@@ -1296,58 +1278,73 @@ var Backend = {
   },
 
   searchSongs: async function(q){
-    var d = await this.get('/search?q=' + encodeURIComponent(q) + '&filter=music_songs');
-    var mapped = (d.items || []).map(this.toTrack.bind(this)).filter(Boolean);
+    var d = await this.get('/api/v1/search?q=' + encodeURIComponent(q) + '&type=video&page=1');
+    var host = this.working || '';
+    var list = (Array.isArray(d) ? d : (d && d.content) || []).filter(function(i){ return i && i.type === 'video'; });
+    var mapped = list.map(function(it){ return this.toTrack(it, host); }.bind(this)).filter(Boolean);
     var out = this.filter(mapped);
     out.tracks.forEach(function(t){ TRACK_MAP[t.id] = t; });
     return out;
   },
 
   searchAlbums: async function(q){
-    var d = await this.get('/search?q=' + encodeURIComponent(q) + '&filter=music_albums');
-    var items = (d.items || []).filter(function(i){ return i && i.type === 'playlist' && i.url; }).slice(0, 6);
+    var d = await this.get('/api/v1/search?q=' + encodeURIComponent(q) + '&type=playlist&page=1');
+    var host = this.working || '';
+    var items = (Array.isArray(d) ? d : (d && d.content) || []).filter(function(i){ return i && i.type === 'playlist'; }).slice(0, 6);
     var self = this;
-    var resolved = await Promise.all(items.map(async function(it){
-      var id = self.listId(it.url);
+    var albs = await Promise.all(items.map(async function(it){
+      var id = String(it.playlistId || '').trim();
+      if (!id) return null;
       var alb = {
-        id: id, title: '', artist: String(it.uploaderName || '').trim(),
-        thumb: it.thumbnail || '', items: [], c: ['#2b5876','#4e4376']
+        id: id,
+        title: String(it.title || '').replace(/^Album\s*[–\-—]\s*/i, '').trim(),
+        artist: String(it.author || '').trim(),
+        thumb: self._thumb(host, it.videos && it.videos[0] && it.videos[0].videoThumbnails ? it.videos[0].videoThumbnails : null) || String(it.playlistThumbnail || '').trim(),
+        items: [], c: ['#2b5876','#4e4376']
       };
+      if (!/^https?:\/\//i.test(alb.thumb) && alb.thumb) alb.thumb = absUrl(host, alb.thumb);
       try {
-        var p = await self.get('/playlists/' + id, 8000);
-        alb.title = String(p.name || '').replace(/^Album\s*[–\-—]\s*/i, '').trim();
-        if (!alb.artist) alb.artist = String(p.uploader || '').trim();
-        if (!alb.thumb) alb.thumb = p.thumbnailUrl || '';
-        alb.items = (p.relatedStreams || []).map(self.toTrack.bind(self)).filter(Boolean);
+        var p = await self.get('/api/v1/playlists/' + encodeURIComponent(id), 8000);
+        if (p && p.title) alb.title = String(p.title || '').replace(/^Album\s*[–\-—]\s*/i, '').trim();
+        if (p && p.author) alb.artist = String(p.author || '').trim() || alb.artist;
+        var videos = (p && Array.isArray(p.videos)) ? p.videos : [];
+        if (!videos.length) videos = (it.videos || []);   /* detail endpoint may return empty — fall back to the search embed */
+        if (!videos.length) throw new Error('no videos');
+        alb.items = videos.map(function(v){ return self._playlistVideo(host, v); }).filter(Boolean);
         alb.items.forEach(function(t){ TRACK_MAP[t.id] = t; });
-      } catch(e){}
+      } catch(e){
+        /* detail endpoint can be empty for YouTube playlists — use the search embed */
+        var emb = (it.videos || []).map(function(v){ return self._playlistVideo(host, v); }).filter(Boolean);
+        alb.items = emb;
+        alb.items.forEach(function(t){ TRACK_MAP[t.id] = t; });
+      }
       return alb;
     }));
-    return { albums: resolved.filter(function(a){ return a.title && a.id; }), hidden: [] };
+    return { albums: albs.filter(function(a){ return a && (a.title || a.id); }), hidden: [] };
   },
 
   album: async function(id){
-    var p = await this.get('/playlists/' + id, 10000);
+    var host = this.working || '';
+    var p = await this.get('/api/v1/playlists/' + encodeURIComponent(id), 10000);
     var self = this;
-    var items = (p.relatedStreams || []).map(self.toTrack.bind(self)).filter(Boolean);
+    var items = ((p && Array.isArray(p.videos)) ? p.videos : []).map(function(v){ return self._playlistVideo(host, v); }).filter(Boolean);
     items.forEach(function(t){ TRACK_MAP[t.id] = t; });
     return {
       id: id,
-      title: String(p.name || 'Album').replace(/^Album\s*[–\-—]\s*/i, '').trim(),
-      artist: String(p.uploader || '').trim(),
-      thumb: p.thumbnailUrl || '',
+      title: String((p && p.title) || 'Album').replace(/^Album\s*[–\-—]\s*/i, '').trim(),
+      artist: String((p && p.author) || '').trim(),
+      thumb: (p && p.playlistThumbnail) ? absUrl(host, String(p.playlistThumbnail)) : '',
       items: items
     };
   },
 
-  /* audio resolution lives in the hybrid chain below:
-     piped -> invidious -> cobalt (first validated success wins) */
+  /* audio resolution lives in the chain below: invidious -> cobalt (first validated success wins) */
 
   probe: async function(){
     try {
-      var d = await this.get('/search?q=test&filter=music_songs', 8000);
+      var d = await this.get('/api/v1/search?q=test&type=video&page=1', 8000);
       this.probeDone = true;
-      state.net = (d && d.items) ? 'online' : 'online';
+      state.net = (d && (Array.isArray(d) ? d.length : (d.content && d.content.length))) ? 'online' : 'online';
       return true;
     } catch(e){
       this.probeDone = true;
@@ -1357,14 +1354,13 @@ var Backend = {
   }
 };
 
-/* ---------- fallback chain: piped -> invidious -> cobalt ---------- */
+/* ---------- fallback chain: invidious -> cobalt ---------- */
 Backend.resolveAudio = async function(videoId, kbps){
   if (!videoId) throw new Error('no video id');
   var start = Date.now();
   var budget = 45000;
   var errs = [];
   var providers = [
-    { name: 'Piped',     fn: pipedResolve },
     { name: 'Invidious', fn: invidiousResolve },
     { name: 'Cobalt',    fn: cobaltResolve }
   ];
@@ -1763,6 +1759,53 @@ async function downloadTrack(id){
   render(); syncPlayer();
 }
 
+/* ---------- crude device download (YouTube → audio file) ---------- */
+function _sanitizeFilename(s){
+  return String(s || 'audio')
+    .replace(/[\/\\?%*:|"<>]+/g, ' ')
+    .replace(/\s+/g, ' ').trim().slice(0, 80) || 'audio';
+}
+function _audioExt(ct, url){
+  ct = String(ct || '').toLowerCase();
+  if (ct.indexOf('mpeg') >= 0 || ct.indexOf('mp3') >= 0) return 'mp3';
+  if (ct.indexOf('wav') >= 0) return 'wav';
+  if (ct.indexOf('flac') >= 0) return 'flac';
+  if (ct.indexOf('ogg') >= 0 || ct.indexOf('opus') >= 0) return 'opus';
+  if (ct.indexOf('webm') >= 0) return 'webm';
+  if (ct.indexOf('mp4') >= 0 || ct.indexOf('m4a') >= 0 || ct.indexOf('aac') >= 0) return 'm4a';
+  var m = String(url || '').match(/\.(mp3|m4a|opus|ogg|wav|flac|webm)(?:[?#]|$)/i);
+  if (m) return m[1].toLowerCase();
+  return 'mp3';
+}
+
+async function downloadAudioFile(id){
+  var t = TRACK_MAP[id];
+  if (!t) return;
+  if (t.source === 'demo'){ toast('Demo tracks can’t be downloaded'); return; }
+  toast('Resolving audio…');
+  try {
+    var got = await Backend.resolveAudio(id, 128);
+    toast('Downloading audio…');
+    var res = await fetch(got.url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var blob = await res.blob();
+    if (!blob || blob.size < 2048) throw new Error('empty stream');
+    var ct = blob.type || res.headers.get('content-type') || '';
+    var ext = _audioExt(ct, got.url);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'Sonora - ' + _sanitizeFilename(t.title) + '.' + ext;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 6000);
+    toast('Audio saved as .' + ext + ' · ' + fmtMB(blob.size) + ' · ' + (PROVIDER_LABEL[got.provider] || got.provider));
+  } catch(e){
+    toast('Audio download failed — ' + (e && e.message ? e.message.split(' · ')[0].trim() : 'all providers failed'));
+  }
+}
+
 async function removeDownload(id){
   state.downloads = state.downloads.filter(function(d){ return d.id !== id; });
   await dbDel('downloads', id);
@@ -2132,11 +2175,8 @@ function viewSettings(){
       : state.net === 'down' ? 'No instance reachable right now' : 'Checking…') + '</div></div>' +
     '<button class="chip" data-act="retry-net">Test</button></div>' +
     '<div class="inputrow"><label for="instInput">Custom instance (optional)</label>' +
-    '<input id="instInput" type="url" inputmode="url" spellcheck="false" placeholder="https://pipedapi.example.com" value="' + esc(st.instance) + '">' +
-    '<div class="hint">Sonora tries public Piped instances in order. Paste your own if you have one — no account needed.</div></div>' +
-    '<div class="inputrow"><label for="keyInput">YouTube Data API key (optional fallback)</label>' +
-    '<input id="keyInput" type="password" spellcheck="false" placeholder="AIza…" value="' + esc(st.apiKey) + '">' +
-    '<div class="hint">Not required. Only used if every public instance is down.</div></div>' +
+    '<input id="instInput" type="url" inputmode="url" spellcheck="false" placeholder="https://invidious.example.com" value="' + esc(st.instance) + '">' +
+    '<div class="hint">Sonora tries public Invidious instances in order. Paste your own if you have one — no account needed.</div></div>' +
     '</div></div>';
 
   html += '<div class="setsec"><h3>Stream backend</h3><div class="card-box">' +
@@ -2145,14 +2185,14 @@ function viewSettings(){
       ? '<b style="color:#cfeedc">' + PROVIDER_LABEL[state.audioSource.name] + '</b> · ' + esc(hostLabel(state.audioSource.host)) + '<br><span style="color:var(--muted2)">resolved ' + ago(state.audioSource.at) + ' · ' + (state.audioSource.bitrate || '—') + ' kbps</span>'
       : 'Not resolved yet — resolves on first play.') + '</div></div>' +
     '<button class="chip" data-act="audio-test">Test now</button></div>' +
-    '<div class="inputrow"><div class="hint">Piped → Invidious → Cobalt — the first validated source wins. ' +
+    '<div class="inputrow"><div class="hint">Invidious → Cobalt — the first validated source wins. ' +
     'Instance lists refresh live from the providers’ own directories, so stale instances never stall a track. ' +
-    'Search stays on Piped; audio resolution uses the full chain. These public services see your track IDs and titles; Cobalt is last resort.</div></div>' +
+    'Search and audio resolution share the Invidious chain; Cobalt is the last resort. These public services see your track IDs and titles.</div></div>' +
     '</div></div>';
 
   html += '<div class="setsec"><h3>Download behaviour</h3><div class="card-box">' +
     '<div class="setrow col"><div><div class="lbl">What “Download” does</div>' +
-    '<div class="sub">Offline audio needs an instance that YouTube still lets decrypt — today most can’t, so it falls back to a library save automatically.</div></div>' +
+    '<div class="sub">“Download audio file” in the track menu saves the real bytes to your device — mp3 from Cobalt, whatever Invidious serves. “Download” stores an offline copy on this device and falls back to a library save if the stream is unavailable.</div></div>' +
     seg('downloadMode', [['audio','Offline audio'],['library','Library save']], st.downloadMode) + '</div>' +
     '<div class="setrow col"><div><div class="lbl">Audio bitrate</div>' +
     '<div class="sub">Applied exactly when a real audio stream is available.</div></div>' +
@@ -2246,7 +2286,8 @@ function openTrackMenu(id){
   var inPl = !!state.activePlaylist;
   var html = '<div class="ahead"><b>' + esc(t.title) + '</b>' + esc(t.artist) + (t.source === 'demo' ? ' · demo track' : ' · audio') + '</div>';
   html += '<button class="aitem" data-act="do-like" data-id="' + id + '">' + (isLiked(id) ? ICONS.heartF : ICONS.heart) + (isLiked(id) ? 'Remove from Liked Songs' : 'Add to Liked Songs') + '</button>';
-  html += '<button class="aitem" data-act="do-download" data-id="' + id + '">' + ICONS.download + (dl ? 'Delete download' : 'Download') + '</button>';
+  html += '<button class="aitem" data-act="do-download" data-id="' + id + '">' + ICONS.download + (dl ? 'Delete download' : 'Download (offline)') + '</button>';
+  html += '<button class="aitem" data-act="do-download-file" data-id="' + id + '">' + ICONS.download + 'Download audio file</button>';
   html += '<button class="aitem" data-act="play" data-id="' + id + '">' + ICONS.play + 'Play now</button>';
   if (t.source !== 'demo'){
     html += '<a class="aitem" style="text-decoration:none;color:inherit" target="_blank" rel="noopener" ' +
@@ -2393,6 +2434,7 @@ document.addEventListener('click', function(e){
     case 'menu': openTrackMenu(id); break;
     case 'do-like': toggleLike(id); closeSheets(); break;
     case 'do-download': if (isDownloaded(id)) removeDownload(id); else downloadTrack(id); closeSheets(); break;
+    case 'do-download-file': downloadAudioFile(id); closeSheets(); break;
     case 'like-current': { var ct = currentTrack(); if (ct) toggleLike(ct.id); break; }
     case 'download-current': { var ct2 = currentTrack(); if (ct2){ if (isDownloaded(ct2.id)) removeDownload(ct2.id); else downloadTrack(ct2.id); } break; }
     case 'toggle': togglePlay(); break;
@@ -2511,11 +2553,6 @@ document.addEventListener('change', function(e){
     toast('Instance saved');
     probeAndRender();
   }
-  if (e.target.id === 'keyInput'){
-    state.settings.apiKey = e.target.value.trim();
-    LS.set('sonora.settings', state.settings);
-    toast('API key saved');
-  }
   if (e.target.id === 'npSeek'){ Player.seek(parseFloat(e.target.value)); paintProgress(); }
   if (e.target.id === 'gdrvClientId'){
     gdriveSaveClientId(e.target.value);
@@ -2625,7 +2662,7 @@ async function probeAndRender(){
      4. the last user-selected album's remainder
      5. any known album's unplayed remainder
      6. a random queue track
-   The public Piped API exposes no release dates, so “chronological
+   The public Invidious API exposes no release dates, so “chronological
    release” is approximated by result order — this is a best-effort
    approximation, not a strict chronology.
    ===================================================================== */
@@ -3521,6 +3558,7 @@ async function boot(){
   gdriveLoadClientId();
   gdriveLoadFileId();
   state.settings = Object.assign({}, state.settings, LS.get('sonora.settings', {}));
+  delete state.settings.apiKey;  /* YouTube Data API key no longer exists */
   state.recent = LS.get('sonora.recent', []);
   state.installDismissed = LS.get('sonora.installDismissed', false);
 
