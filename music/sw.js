@@ -13,7 +13,7 @@
    Without it everything still works — you just need the network to load.
    ========================================================================== */
 
-const VERSION = 'sonora-v3';
+const VERSION = 'sonora-v4';
 
 const SHELL = [
   './',
