@@ -397,6 +397,10 @@
 
   #tabbar{
     flex:1 1 auto;
+    /* the design token is 58px but the row only measured 38px, which pushed the
+       labels hard against the screen edge on a 390x844 phone */
+    min-height:var(--tabbar-h);
+    padding-bottom:var(--safe-b);
     display:flex;align-items:stretch;
     background:linear-gradient(180deg, #171310 0%, #100d09 100%);
   }
@@ -754,7 +758,7 @@ var COBALT_FALLBACK = ['https://cobalt-api.meowing.de', 'https://cobalt-backend.
 var COBALT_MAX_INSTANCES = 3;
 
 var AUDIO_QUAL_KBPS = function(q){
-  return q === 'saver' ? 64 : q === 'high' ? 256 : 128;
+  return q === 'saver' ? 48 : q === 'high' ? 256 : 128;   /* 48 to match KBPS + the 48k label */
 };
 
 var PROVIDER_LABEL = { invidious: 'Invidious', cobalt: 'Cobalt' };
@@ -937,6 +941,9 @@ function absUrl(base, u){
 }
 
 /* ---------- invidious (instance-side /videoplayback proxy) ---------- */
+/* DASH audio itags: 139/140/141 = AAC, 249/250/251 = Opus, 256/258 = AAC HE. */
+var AUDIO_ITAG = { 139:1, 140:1, 141:1, 249:1, 250:1, 251:1, 256:1, 258:1 };
+
 async function invidiousResolve(videoId, kbps){
   var hosts = (await Backend._listHosts()).filter(function(h){ return !Backend._deadHosts[h]; });
   var errs = [];
@@ -954,7 +961,13 @@ async function invidiousResolve(videoId, kbps){
         var br = Number(a.bitrate) || 0;
         if (br > 10000) br = Math.round(br / 1000);
         var type = String(a.type || a.mimeType || '').toLowerCase();
-        if (!/^audio\//.test(type)) return null;
+        var itag = Number(a.itag);
+        /* Some instances ship adaptiveFormats with no type/mimeType at all
+           (verified on invidious.ritoge.com, 2026-11-22: 26 formats, every one
+           with mimeType null). Classify by itag so those hosts still work. */
+        var isAudio = /^audio\//.test(type) || (!type && AUDIO_ITAG[itag]) || (AUDIO_ITAG[itag] && !/^video\//.test(type));
+        if (!isAudio) return null;
+        if (!type) type = (itag === 139 || itag === 140 || itag === 141) ? 'audio/mp4' : 'audio/webm';
         return { url: absUrl(host, a.url), bitrate: br, type: type };
       }).filter(function(a){ return a && a.url; });
       if (!list.length) throw new Error('no audio streams');
@@ -973,6 +986,11 @@ async function invidiousResolve(videoId, kbps){
 
 /* ---------- cobalt (instance streams back the audio) ---------- */
 async function cobaltResolve(videoId, kbps){
+  /* Every reachable Cobalt 11 instance now demands a Turnstile-backed JWT
+     (error.api.auth.jwt.missing), so once we see that we stop paying 10s per
+     track on it. The code path stays here so a self-hosted/keyed instance
+     still works if the user points at one. */
+  if (Backend._cobaltGated) throw new Error('instances require an API session (error.api.auth.jwt.missing) — skipped this session');
   var hosts = (await cobaltLiveList()).filter(function(h){ return !Backend._deadHosts[h]; });
   var errs = [];
   for (var i = 0; i < Math.min(hosts.length, COBALT_MAX_INSTANCES); i++){
@@ -982,7 +1000,9 @@ async function cobaltResolve(videoId, kbps){
     try {
       var res = await fetch(host, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        /* Cobalt rejects requests without an explicit JSON Accept header
+           (error.api.header.accept) — verified against three live instances. */
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         signal: ctrl.signal, cache: 'no-store',
         body: JSON.stringify({
           url: 'https://www.youtube.com/watch?v=' + videoId,
@@ -993,9 +1013,20 @@ async function cobaltResolve(videoId, kbps){
       });
       clearTimeout(timer);
       var d = await res.json().catch(function(){ return null; });
+      /* Cobalt answers 400 {"code":"error.api.auth.jwt.missing"} — the code sits
+         at the top level, not nested under .error, so read both shapes. */
+      var code = !d ? '' : (typeof d.code === 'string' ? d.code
+        : (d.error && typeof d.error.code === 'string') ? d.error.code
+        : typeof d.error === 'string' ? d.error : '');
+      if (/jwt|auth|turnstile|session/i.test(code)){
+        Backend._cobaltGated = true;
+        throw new Error(code === 'error.api.auth.jwt.missing'
+          ? 'needs an API session (error.api.auth.jwt.missing)'
+          : String(code).slice(0, 90));
+      }
       var url = d && (d.status === 'tunnel' || d.status === 'redirect' || d.status === 'ok') ? d.url : (d && d.url);
       if (!url || !isPlainUrl(url)){
-        var why = d && (d.error || d.status || d.code) ? (d.error || d.status || d.code) : ('HTTP ' + (res.status || '?'));
+        var why = code || (d && typeof d.status === 'string' ? d.status : '') || ('HTTP ' + (res.status || '?'));
         throw new Error(String(why).slice(0, 140));
       }
       var sniff = await probeAudioUrl(url, 6000);
@@ -1162,6 +1193,7 @@ var Backend = {
   lastError: '',
   probeDone: false,
   _deadHosts: {},
+  _cobaltGated: false,
 
   hosts: function(){
     var custom = String(state.settings.instance || '').trim().replace(/\/+$/, '');
@@ -1186,6 +1218,29 @@ var Backend = {
     return out;
   },
 
+  /* Public instances flap: the same search URL that answers 200 with a CORS
+     header one second can drop the socket or lose the header the next. One
+     quick retry turns a good share of those misses into hits before we write
+     the host off for the session. 4xx still fails immediately (real answer). */
+  _fetchRetry: async function(url, ms, tries){
+    var last, i;
+    tries = tries || 2;
+    for (i = 0; i < tries; i++){
+      var ctrl = new AbortController();
+      var timer = setTimeout(function(){ ctrl.abort('timeout'); }, ms);
+      try {
+        var res = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+        clearTimeout(timer);
+        return res;
+      } catch(e){
+        clearTimeout(timer);
+        last = e;
+        if (i < tries - 1) await new Promise(function(r){ setTimeout(r, 400); });
+      }
+    }
+    throw last;
+  },
+
   get: async function(path, timeout, hostsOverride){
     var hosts = hostsOverride || await this._listHosts();
     if (!hosts || !hosts.length) throw new Error('no Invidious instances available');
@@ -1195,18 +1250,14 @@ var Backend = {
     var errs = [];
     for (var i = 0; i < hosts.length; i++){
       var host = hosts[i];
-      var ctrl = new AbortController();
-      var timer = setTimeout(function(){ ctrl.abort('timeout'); }, timeout || 9000);
       try {
-        var res = await fetch(host + path, { signal: ctrl.signal, cache:'no-store' });
-        clearTimeout(timer);
+        var res = await this._fetchRetry(host + path, timeout || 9000);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
         this.working = host;
         this.lastError = '';
         return json;
       } catch(e){
-        clearTimeout(timer);
         errs.push(host.replace(/^https?:\/\//,'') + ' → ' + (e && e.message ? e.message : 'failed'));
       }
     }
@@ -1800,7 +1851,10 @@ async function downloadAudioFile(id){
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var blob = await res.blob();
     if (!blob || blob.size < 2048) throw new Error('empty stream');
-    var ct = blob.type || res.headers.get('content-type') || '';
+    var ct = (blob.type || res.headers.get('content-type') || '').toLowerCase();
+    /* Never hand the user a 200-byte JSON error dressed up as a song. The
+       instances do answer 200 + application/json for unavailable videos. */
+    if (/json|text\/html|text\/plain/.test(ct)) throw new Error('provider returned ' + ct + ', not audio');
     var ext = _audioExt(ct, got.url);
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -1859,7 +1913,9 @@ function renderTopbar(){
   var chip = state.net === 'online'
     ? '<span id="statusChip" class="statuschip">LIVE</span>'
     : state.net === 'down'
-      ? '<span id="statusChip" class="statuschip err">OFFLINE</span>'
+      ? (navigator.onLine === false
+          ? '<span id="statusChip" class="statuschip err">OFFLINE</span>'
+          : '<span id="statusChip" class="statuschip err">NO INSTANCES</span>')
       : '<span id="statusChip" class="statuschip off">…</span>';
 
   $('#pageTitle').innerHTML = esc(label) + ' ' + chip;
@@ -2593,12 +2649,39 @@ Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), functi
 });
 
 /* ------------------------------ search + album loaders ------------------------------ */
+/* A pasted YouTube link/ID always resolves to a playable result, even when
+   every instance is unreachable — it can then be played or downloaded via
+   whatever direct source resolves. */
+function parseYouTubeLink(q){
+  var m = String(q || '').trim();
+  if (!m || m.length > 200) return '';
+  var pats = [/[?&]v=([A-Za-z0-9_-]{11})/, /youtu\.be\/([A-Za-z0-9_-]{11})/,
+              /\/shorts\/([A-Za-z0-9_-]{11})/, /\/embed\/([A-Za-z0-9_-]{11})/];
+  for (var i = 0; i < pats.length; i++){
+    var r = pats[i].exec(m);
+    if (r) return r[1];
+  }
+  if (/^[A-Za-z0-9_-]{11}$/.test(m) && /[-_0-9]/.test(m)) return m;
+  return '';
+}
+
 async function runSearch(){
   var q = state.query.trim();
   if (!q){ state.results = []; state.albumResults = []; state.searchError = null; state.searching = false; render(); return; }
   var seq = ++searchSeq;
   state.searching = true; state.searchError = null; state.hidden = [];
   render();
+
+  var linkId = state.searchMode === 'songs' ? parseYouTubeLink(q) : '';
+  if (linkId){
+    var lt = { id: linkId, title: 'YouTube · ' + linkId, artist: 'Pasted link', album: '',
+      dur: 0, thumb: 'https://i.ytimg.com/vi/' + linkId + '/mqdefault.jpg', source: 'link' };
+    TRACK_MAP[linkId] = lt;
+    state.results = [lt]; state.albumResults = []; state.hidden = [];
+    state.searching = false; state.searchError = null;
+    render();
+    return;
+  }
   try {
     if (state.searchMode === 'albums'){
       var a = await Backend.searchAlbums(q);
