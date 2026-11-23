@@ -600,6 +600,11 @@
   .import-actions{display:flex;gap:10px;padding:12px 16px}
   .import-actions button{flex:1;font-size:13px;font-weight:800;letter-spacing:.04em;padding:12px;border:1px solid var(--line);background:linear-gradient(180deg, var(--surface2), var(--surface));box-shadow:var(--bevel);color:var(--text)}
   .import-actions button.primary{color:var(--accent-ink);background:linear-gradient(180deg,#f0bc58,#cf9130);border-color:#7a4e16}
+
+  /* official-player frame (visible, in the now-playing sheet) */
+  .np-video-wrap{width:calc(100% - 28px);max-width:560px;margin-left:auto;margin-right:auto;aspect-ratio:16/9;border-radius:2px;overflow:hidden;border:1px solid var(--line-2);background:#000;position:relative;box-shadow:0 14px 34px rgba(0,0,0,.5);margin:14px auto 4px}
+  .np-video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .np-video-wrap.tappable{cursor:pointer}
 </style>
 </head>
 <body>
@@ -612,10 +617,10 @@
     <nav id="tabbar">
       <button data-tab="home" aria-label="Home"></button>
       <button data-tab="search" aria-label="Search"></button>
-      <button data-tab="library" aria-label="Library"></button>
+      <button data-tab="library" aria-label="Recently played"></button>
     </nav>
     <div id="sbFoot">
-      <div class="foot"><b>PRIVACY</b><br>Nothing leaves this device<br>except playback.</div>
+      <div class="foot"><b>PRIVACY</b><br>No account. Nothing leaves this device except playback and search.</div>
     </div>
   </aside>
   <div id="content">
@@ -646,11 +651,11 @@
       <div class="label">NOW PLAYING</div>
       <button class="iconbtn" data-act="np-menu" aria-label="More"></button>
     </div>
-    <div class="np-art art" id="npArt"></div>
+    <div class="np-video-wrap tappable" id="npVideoWrap"></div>
     <div class="np-body">
       <div class="np-title" id="npTitle">—</div>
       <div class="np-artist" id="npArtist">—</div>
-      <div class="np-qual" id="npQual">AUDIO</div>
+      <div class="np-qual" id="npQual">OFFICIAL PLAYER</div>
       <div class="seek">
         <span id="npCur">0:00</span>
         <input type="range" id="npSeek" min="0" max="100" value="0" step="0.5" aria-label="Seek">
@@ -668,35 +673,16 @@
       </div>
     </div>
     <div class="np-bottom">
-      <button class="iconbtn" data-act="like-current" id="npLike" aria-label="Like"></button>
       <button class="iconbtn" data-act="lyrics-toggle" id="npLyricsBtn" aria-label="Lyrics"></button>
-      <button class="iconbtn" data-act="download-current" id="npDl" aria-label="Download"></button>
     </div>
   </section>
 
   <div id="scrim"></div>
   <div id="asheet"></div>
   <div id="toast"></div>
-  <audio id="blobAudio" preload="auto"></audio>
 </div>
 
 <script>
-"use strict";
-
-/* =====================================================================
-   Sonora — YouTube Music client, single file
-   ---------------------------------------------------------------------
-   Backend  : public Invidious API instances for search (no key, no server,
-              no login) — /api/v1/search?type=video returns YouTube videos,
-              and music videos are dropped on the way in, which is the whole
-              point: no YouTube iframe, no ads.
-   Playback : audio resolution follows Invidious → Cobalt. The first
-              validated source wins (HTML/error responses are rejected), so
-              the app degrades gracefully when one or more providers are
-              rate-limited. No YouTube iframe, no ads, no external players.
-   Storage  : IndexedDB (library, downloads, audio blobs) + localStorage
-   ===================================================================== */
-
 var ICONS = {
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l-2 0l9 -9l9 9l-2 0" /> <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" /> <path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" /></svg>',
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /> <path d="M21 21l-6 -6" /></svg>',
@@ -733,62 +719,76 @@ var ICONS = {
   refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /> <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>',
   clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /> <path d="M12 7v5l3 3" /></svg>',
   check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10" /></svg>',
-};
+};"use strict";
+
+/* =====================================================================
+   Sonora — YouTube Music client, single file
+   ---------------------------------------------------------------------
+   Playback : the official YouTube iframe player only — no direct-audio
+              providers, no downloads, no offline mode. One player, one
+              service worth trusting: YouTube itself.
+   Search   : public Invidious instances (no key, no server, no login).
+              Used for discovery only — playback never touches a third
+              party other than YouTube.
+   Storage  : localStorage (play history + settings)
+   ===================================================================== */
+
+/* ------------------------------ helpers ------------------------------ */
+function $(s){ return document.querySelector(s); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function fmt(sec){ sec = Math.max(0, Math.floor(sec||0)); var m = Math.floor(sec/60), s = sec%60; return m + ':' + (s<10?'0':'') + s; }
+function normTitle(s){
+  return String(s || '').toLowerCase()
+    .replace(/\((official|lyric|lyrics|audio|visualizer|hd|4k)[^)]*\)/g,' ')
+    .replace(/\[[^\]]*\]/g,' ')
+    .replace(/[^a-z0-9 ]/g,' ')
+    .replace(/\s+/g,' ').trim();
+}
+function absUrl(base, u){
+  u = String(u || '').trim();
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u;
+  return String(base || '').replace(/\/+$/, '') + '/' + u.replace(/^\/+/, '');
+}
+function hostLabel(h){ return String(h || '').replace(/^https?:\/\//, '').replace(/\/+$/, ''); }
+function isPlainUrl(u){ return /^https?:\/\//i.test(String(u || '')); }
+
+var LS = (function(){
+  var mem = {};
+  function get(k, d){
+    try {
+      var v = localStorage.getItem(k);
+      if (v == null) return d;
+      return JSON.parse(v);
+    } catch (e){ return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : d; }
+  }
+  function set(k, v){
+    try { localStorage.setItem(k, JSON.stringify(v)); }
+    catch (e){ mem[k] = v; }
+  }
+  function del(k){ try { localStorage.removeItem(k); } catch (e){ delete mem[k]; } }
+  return { get: get, set: set, del: del };
+})();
+
+function toast(msg){
+  var el = $('#toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function(){ el.classList.remove('show'); }, 2600);
+}
 
 /* ------------------------------ config ------------------------------ */
-/* ------------------------------ provider directory ------------------------------
-   Instance lists are fetched LIVE at runtime and cached — dead or stale instances
-   never stall the chain. Each provider has a hardcoded fallback built from the
-   published, browser-verified lists. The app never embeds credentials; public
-   instance URLs only, and these services only ever receive a track's video id. */
+/* Invidious — instances that actually returned search results. */
 var DIRECTORY_CACHE = {};
 var DIRECTORY_TTL = 15 * 60 * 1000;
 var DIRECTORY_TTL_FAIL = 60 * 1000;
-
-/* Invidious — instances that actually returned stream metadata (train233kei/invidious-watch). */
 var INVIDIOUS_DIRECTORY = 'https://raw.githubusercontent.com/train233kei/invidious-watch/main/instances.json';
 var INVIDIOUS_FALLBACK = ['https://iv.catgirl.cloud', 'https://invidious.ritoge.com'];
 
-/* Cobalt — instances.cobalt.best/instances.json (current) with the legacy shape as fallback. */
-var COBALT_DIRECTORIES = [
-  'https://instances.cobalt.best/instances.json',
-  'https://instances.cobalt.best/api/instances.json'
-];
-var COBALT_FALLBACK = ['https://cobalt-api.meowing.de', 'https://cobalt-backend.canine.tools', 'https://capi.3kh0.net'];
-var COBALT_MAX_INSTANCES = 3;
-
-var AUDIO_QUAL_KBPS = function(q){
-  return q === 'saver' ? 48 : q === 'high' ? 256 : 128;   /* 48 to match KBPS + the 48k label */
-};
-
-var PROVIDER_LABEL = { invidious: 'Invidious', cobalt: 'Cobalt', official: 'Official player' };
-
-function hostLabel(h){
-  return String(h || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
-}
-
-/* Full aggregated provider error, capped so toasts stay readable. */
-function fmtResolveError(e){
-  var m = e && e.message ? String(e.message) : 'audio unavailable';
-  if (m.length > 220) m = m.slice(0, 220).replace(/ ·\s*$/, '') + '…';
-  return m;
-}
-
-function ago(ts){
-  if (!ts) return 'just now';
-  var s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (s < 5) return 'just now';
-  if (s < 60) return s + 's ago';
-  var m = Math.floor(s / 60);
-  if (m < 60) return m + 'm ago';
-  var h = Math.floor(m / 60);
-  if (h < 24) return h + 'h ago';
-  return Math.floor(h / 24) + 'd ago';
-}
-
-function isPlainUrl(u){
-  return /^https?:\/\//i.test(String(u || ''));
-}
+var VIDEO_RX = [/official\s*(music\s*)?video/i, /\blyrics?\s*video\b/i, /\bvisuali[sz]er\b/i, /\b(official|audio)\s*lyrics?\b/i];
+var SOFT_VIDEO_RX = [/\blyric\s+video\b/i, /\bvisuali[sz]er\b/i, /\baudio\s+video\b/i];
 
 async function directoryFetch(urls, timeout){
   var errs = [];
@@ -798,7 +798,7 @@ async function directoryFetch(urls, timeout){
     try {
       var res = await fetch(urls[i], { signal: ctrl.signal, cache: 'no-store' });
       clearTimeout(timer);
-      if (!res.ok) { errs.push(hostLabel(urls[i]) + ' HTTP ' + res.status); continue; }
+      if (!res.ok){ errs.push(hostLabel(urls[i]) + ' HTTP ' + res.status); continue; }
       return await res.text();
     } catch (e) {
       clearTimeout(timer);
@@ -807,7 +807,6 @@ async function directoryFetch(urls, timeout){
   }
   throw new Error(errs.join(' · ') || 'directory unreachable');
 }
-
 function invidiousListFromText(txt){
   var d;
   try { d = JSON.parse(txt); } catch (e) { return []; }
@@ -822,42 +821,14 @@ function invidiousListFromText(txt){
     }
   }
   var out = [];
-  for (var i = 0; i < urls.length; i++){
-    var u = String(urls[i] || '').trim();
+  for (var j = 0; j < urls.length; j++){
+    var u = String(urls[j] || '').trim();
     if (!isPlainUrl(u)) continue;
     u = u.replace(/\/+$/, '');
     if (out.indexOf(u) < 0) out.push(u);
   }
   return out;
 }
-
-function cobaltListFromText(txt){
-  var d;
-  try { d = JSON.parse(txt); } catch (e) { return []; }
-  var arr = Array.isArray(d) ? d : (d && Array.isArray(d.instances) ? d.instances : []);
-  var out = [];
-  for (var i = 0; i < arr.length; i++){
-    var x = arr[i] || {};
-    var raw = String(x.api || x.url || x.apiUrl || '').trim();
-    if (!raw) continue;
-    if (x.online !== true) continue;                     // require explicit online === true
-    if (x.info && (x.info.auth === true)) continue;      // no key/auth-gated instances
-    var svc = x.services || {};
-    var yOk = svc.youtube === true || svc.youtube === 'ok' || svc.youtube === 'up' || svc.youtube === 'healthy';
-    if (!yOk) continue;                                  // YouTube must actually work
-    // Known non-browser-compatible Cobalt instances (Turnstile / key-gated) — never fetch them.
-    if (/imput\.net|api\.cobalt\.tools/i.test(raw)) continue;
-    var u = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw;
-    u = u.replace(/\/+$/, '');
-    if (!isPlainUrl(u)) continue;
-    out.push({ url: u, score: Number(x.score) || 0 });
-  }
-  out.sort(function(a, b){ return b.score - a.score; });
-  var seen = {}, res = [];
-  for (var j = 0; j < out.length; j++){ if (seen[out[j].url]) continue; seen[out[j].url] = 1; res.push(out[j].url); }
-  return res;
-}
-
 async function providerList(kind, urls, fallback, parse){
   var now = Date.now();
   var cached = DIRECTORY_CACHE[kind];
@@ -875,273 +846,17 @@ async function providerList(kind, urls, fallback, parse){
   DIRECTORY_CACHE[kind] = { at: now, data: fb, short: true };
   return fb;
 }
-
 function invidiousLiveList(){ return providerList('invidious', [INVIDIOUS_DIRECTORY], INVIDIOUS_FALLBACK, invidiousListFromText); }
-function cobaltLiveList(){ return providerList('cobalt', COBALT_DIRECTORIES, COBALT_FALLBACK, cobaltListFromText); }
-
-/* Strict-ish media validation for resolved URLs. <audio> plays cross-origin
-   media without CORS, so only a confidently-bad URL (HTML/JSON/error body or a
-   non-audio response sniffed out) rejects; unreadable URLs are trusted — the
-   audio element will surface the real outcome. */
-async function probeAudioUrl(url, timeout){
-  try { new URL(url); } catch (e) { throw new Error('bad audio URL'); }
-  var ctrl = new AbortController();
-  var timer = setTimeout(function(){ ctrl.abort(); }, timeout || 6000);
-  try {
-    var res = await fetch(url, { headers: { 'Range': 'bytes=0-8191' }, signal: ctrl.signal, cache: 'no-store' });
-    clearTimeout(timer);
-    var ct = (res.headers && res.headers.get ? (res.headers.get('content-type') || '') : '').toLowerCase();
-    if (!res || !res.ok){
-      if (/^text\/html|^application\/json|^text\/xml|^application\/xml|^text\/plain/.test(ct)) throw new Error('not media (HTTP ' + (res && res.status ? res.status : 0) + ')');
-      return { ok: true, known: false };
-    }
-    if (/text\/html|application\/json|javascript/.test(ct)) throw new Error('not media (' + (ct || 'unknown type') + ')');
-    if (/^audio\//.test(ct)) return { ok: true, known: true };
-    try {
-      var rdr = res.body && res.body.getReader ? res.body.getReader() : null;
-      if (rdr){
-        var got = await Promise.race([rdr.read(), new Promise(function(res2){ setTimeout(function(){ res2({ done: true }); }, 2500); })]);
-        try { rdr.cancel(); } catch (e) {}
-        if (got && got.value && got.value.byteLength >= 4){
-          var b = new Uint8Array(got.value);
-          var isMedia =
-            (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) ||
-            (b[0] === 0xFF && (b[1] & 0xE0) === 0xE0) ||
-            (b[0] === 0x4F && b[1] === 0x67 && b[2] === 0x67) ||
-            (b[0] === 0x1A && b[1] === 0x45 && b[2] === 0xDF && b[3] === 0xA3) ||
-            (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) ||
-            (b[0] === 0x66 && b[1] === 0x4C && b[2] === 0x61 && b[3] === 0x43) ||
-            (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46);
-          if (isMedia) return { ok: true, known: true };
-        }
-      }
-    } catch (e) { /* probe read failed — fall through to heuristic */ }
-    return { ok: true, known: false };
-  } catch (e) {
-    clearTimeout(timer);
-    if (e && e.message && /not media/.test(e.message)) throw e;
-    if (isPlainUrl(url)) return { ok: true, known: false };
-    throw e;
-  }
-}
-
-function pickAudio(list, kbps){
-  if (!list || !list.length) return null;
-  list = list.slice().sort(function(a, b){ return a.bitrate - b.bitrate; });
-  var pick = null;
-  for (var i = 0; i < list.length; i++){ if (list[i].bitrate <= kbps) pick = list[i]; }
-  return pick || list[0];
-}
-
-function absUrl(base, u){
-  u = String(u || '').trim();
-  if (!u) return null;
-  if (/^https?:\/\//i.test(u)) return u;
-  return base.replace(/\/+$/, '') + '/' + u.replace(/^\/+/, '');
-}
-
-/* ---------- invidious (instance-side /videoplayback proxy) ---------- */
-/* DASH audio itags: 139/140/141 = AAC, 249/250/251 = Opus, 256/258 = AAC HE. */
-var AUDIO_ITAG = { 139:1, 140:1, 141:1, 249:1, 250:1, 251:1, 256:1, 258:1 };
-
-async function invidiousResolve(videoId, kbps){
-  var hosts = (await Backend._listHosts()).filter(function(h){ return !Backend._deadHosts[h]; });
-  var errs = [];
-  for (var i = 0; i < Math.min(hosts.length, 3); i++){
-    var host = hosts[i];
-    var ctrl = new AbortController();
-    var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
-    try {
-      var res = await fetch(host + '/api/v1/videos/' + encodeURIComponent(videoId) + '?local=true', { signal: ctrl.signal, cache: 'no-store' });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      var d = await res.json();
-      var list = (d.adaptiveFormats || []).map(function(a){
-        if (!a || !a.url) return null;
-        var br = Number(a.bitrate) || 0;
-        if (br > 10000) br = Math.round(br / 1000);
-        var type = String(a.type || a.mimeType || '').toLowerCase();
-        /* Some instances ship adaptiveFormats with no type/mimeType at all
-           (verified on invidious.ritoge.com, 2026-11-22: 26 formats, every one
-           with mimeType null). Classify by itag so those hosts still work. */
-        var itag = Number(a.itag);
-        var isAudio = /^audio\//.test(type) || (!type && AUDIO_ITAG[itag]) || (AUDIO_ITAG[itag] && !/^video\//.test(type));
-        if (!isAudio) return null;
-        if (!type) type = (itag === 139 || itag === 140 || itag === 141) ? 'audio/mp4' : 'audio/webm';
-        return { url: absUrl(host, a.url), bitrate: br, type: type, itag: itag };
-      }).filter(function(a){ return a && a.url; });
-      if (!list.length) throw new Error('no audio streams');
-      var pick = pickAudio(list, kbps);
-      var sniff = await probeAudioUrl(pick.url, 6000);
-      if (!sniff.ok) throw new Error('audio URL failed validation');
-      return { url: pick.url, host: host, provider: 'invidious', bitrate: pick.bitrate };
-    } catch (e) {
-      clearTimeout(timer);
-      errs.push(host.replace(/^https?:\/\//,'') + ' → ' + (e && e.message ? e.message : 'failed'));
-      if (/HTTP [4]\d\d/.test(String(e && e.message || ''))) Backend._deadHosts[host] = true;  /* 4xx = instance itself is down/gone for the session */
-    }
-  }
-  throw new Error(errs.join(' · ') || 'no invidious instance worked');
-}
-
-/* ---------- cobalt (instance streams back the audio) ---------- */
-async function cobaltResolve(videoId, kbps){
-  /* Every reachable Cobalt 11 instance now demands a Turnstile-backed JWT
-     (error.api.auth.jwt.missing), so once we see that we stop paying 10s per
-     track on it. The code path stays here so a self-hosted/keyed instance
-     still works if the user points at one. */
-  if (Backend._cobaltGated) throw new Error('instances require an API session (error.api.auth.jwt.missing) — skipped this session');
-  var hosts = (await cobaltLiveList()).filter(function(h){ return !Backend._deadHosts[h]; });
-  var errs = [];
-  for (var i = 0; i < Math.min(hosts.length, COBALT_MAX_INSTANCES); i++){
-    var host = hosts[i];
-    var ctrl = new AbortController();
-    var timer = setTimeout(function(){ ctrl.abort(); }, 10000);
-    try {
-      var res = await fetch(host, {
-        method: 'POST',
-        /* Cobalt rejects requests without an explicit JSON Accept header
-           (error.api.header.accept) — verified against three live instances. */
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        signal: ctrl.signal, cache: 'no-store',
-        body: JSON.stringify({
-          url: 'https://www.youtube.com/watch?v=' + videoId,
-          downloadMode: 'audio',
-          audioFormat: 'mp3',
-          audioBitrate: kbps
-        })
-      });
-      clearTimeout(timer);
-      var d = await res.json().catch(function(){ return null; });
-      /* Cobalt answers 400 {"code":"error.api.auth.jwt.missing"} — the code sits
-         at the top level, not nested under .error, so read both shapes. */
-      var code = !d ? '' : (typeof d.code === 'string' ? d.code
-        : (d.error && typeof d.error.code === 'string') ? d.error.code
-        : typeof d.error === 'string' ? d.error : '');
-      if (/jwt|auth|turnstile|session/i.test(code)){
-        Backend._cobaltGated = true;
-        throw new Error(code === 'error.api.auth.jwt.missing'
-          ? 'needs an API session (error.api.auth.jwt.missing)'
-          : String(code).slice(0, 90));
-      }
-      var url = d && (d.status === 'tunnel' || d.status === 'redirect' || d.status === 'ok') ? d.url : (d && d.url);
-      if (!url || !isPlainUrl(url)){
-        var why = code || (d && typeof d.status === 'string' ? d.status : '') || ('HTTP ' + (res.status || '?'));
-        throw new Error(String(why).slice(0, 140));
-      }
-      var sniff = await probeAudioUrl(url, 6000);
-      if (!sniff.ok) throw new Error('audio URL failed validation');
-      return { url: url, host: host, provider: 'cobalt', bitrate: kbps };
-    } catch (e) {
-      clearTimeout(timer);
-      errs.push(host.replace(/^https?:\/\//,'') + ' → ' + (e && e.message ? e.message : 'failed'));
-      if (/HTTP [4]\d\d/.test(String(e && e.message || ''))) Backend._deadHosts[host] = true;
-    }
-  }
-  throw new Error(errs.join(' · ') || 'no cobalt instance worked');
-}
-
-var KBPS = { saver:48, normal:128, high:256 };
-var QUAL_LABEL = { saver:'Data saver', normal:'Normal', high:'High', auto:'Auto' };
-
-var VIDEO_RX = [
-  /\bofficial\s+(music\s+)?video\b/i, /\bmusic\s+video\b/i, /\bM\/?V\b/i,
-  /\bvideoclip\b/i, /video\s+oficial/i, /clip\s+officiel/i,
-  /\blive\s+(at|from|in|on)\b/i, /\bperformance\b/i, /\bchoreography\b/i,
-  /\bdance\s+practice\b/i, /\binterview\b/i, /\bteaser\b/i, /\btrailer\b/i,
-  /\bbehind\s+the\s+scenes\b/i
-];
-var SOFT_VIDEO_RX = [/\blyric\s+video\b/i, /\bvisuali[sz]er\b/i, /\baudio\s+video\b/i];
-
-/* ------------------------------ storage ------------------------------ */
-var memory = new Map();
-var LS = (function(){
-  var ok = true;
-  try { localStorage.setItem('__probe','1'); localStorage.removeItem('__probe'); } catch(e){ ok = false; }
-  return {
-    ok: ok,
-    get: function(k, d){
-      try { var v = ok ? localStorage.getItem(k) : memory.get(k); return (v === null || v === undefined) ? d : JSON.parse(v); }
-      catch(e){ return d; }
-    },
-    set: function(k, v){
-      try { if (ok) localStorage.setItem(k, JSON.stringify(v)); else memory.set(k, JSON.stringify(v)); } catch(e){}
-    }
-  };
-})();
-
-var db = null, idbBroken = false;
-var memStores = { playlists:{}, albums:{}, liked:{}, downloads:{}, blobs:{} };
-
-function openDB(){
-  return new Promise(function(resolve){
-    if (idbBroken || !('indexedDB' in window)) return resolve(null);
-    var req;
-    try { req = indexedDB.open('sonora', 2); } catch(e){ idbBroken = true; return resolve(null); }
-    req.onupgradeneeded = function(){
-      var d = req.result;
-      ['playlists','albums','liked','downloads','blobs'].forEach(function(s){
-        if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, {keyPath:'id'});
-      });
-    };
-    req.onsuccess = function(){ resolve(req.result); };
-    req.onerror = function(){ idbBroken = true; resolve(null); };
-    req.onblocked = function(){ resolve(null); };
-  });
-}
-function dbAll(store){
-  return new Promise(function(resolve){
-    if (!db) return resolve(Object.values(memStores[store] || {}));
-    try {
-      var r = db.transaction(store,'readonly').objectStore(store).getAll();
-      r.onsuccess = function(){ resolve(r.result || []); };
-      r.onerror = function(){ resolve(Object.values(memStores[store] || {})); };
-    } catch(e){ resolve(Object.values(memStores[store] || {})); }
-  });
-}
-function dbPut(store, val){
-  return new Promise(function(resolve){
-    if (!db){ memStores[store][val.id] = val; return resolve(true); }
-    try {
-      var r = db.transaction(store,'readwrite').objectStore(store).put(val);
-      r.onsuccess = function(){ resolve(true); };
-      r.onerror = function(){ memStores[store][val.id] = val; resolve(true); };
-    } catch(e){ memStores[store][val.id] = val; resolve(true); }
-  });
-}
-function dbGet(store, id){
-  return new Promise(function(resolve){
-    if (!db) return resolve(memStores[store][id] || null);
-    try {
-      var r = db.transaction(store,'readonly').objectStore(store).get(id);
-      r.onsuccess = function(){ resolve(r.result || null); };
-      r.onerror = function(){ resolve(memStores[store][id] || null); };
-    } catch(e){ resolve(memStores[store][id] || null); }
-  });
-}
-function dbDel(store, id){
-  return new Promise(function(resolve){
-    if (!db){ delete memStores[store][id]; return resolve(true); }
-    try {
-      var r = db.transaction(store,'readwrite').objectStore(store).delete(id);
-      r.onsuccess = function(){ resolve(true); };
-      r.onerror = function(){ delete memStores[store][id]; resolve(true); };
-    } catch(e){ delete memStores[store][id]; resolve(true); }
-  });
-}
 
 /* ------------------------------ state ------------------------------ */
 var state = {
   view:'home', tab:'home',
-  playlists:[], albums:[], liked:[], downloads:[], recent:[],
-  activePlaylist:null, activeAlbum:null, activeAlbumObj:null,
-  libTab:'playlists',
   query:'', searchMode:'songs',
   results:[], albumResults:[], hidden:[], searching:false, searchError:null,
-  settings:{ streamQuality:'auto', downloadQuality:'high', downloadMode:'audio',
-             strictness:'balanced', capMB:512, instance:'', engine:'auto' },
+  settings:{ strictness:'balanced', instance:'' },
   queue:[], idx:-1, playing:false, progress:0, shuffle:false, repeat:false,
-  net:'unknown', installDismissed:false, canInstall:false, ready:false, audioSource:null
+  net:'unknown', recent:[], activeAlbumObj:null,
+  installDismissed:false, canInstall:false, ready:false
 };
 
 var TRACK_MAP = {};
@@ -1149,60 +864,22 @@ var deferredPrompt = null;
 var ticker = null;
 var standalone = false;
 var searchSeq = 0, searchTimer = null, searchDirty = false;
-
-/* ------------------------------ helpers ------------------------------ */
-function $(s){ return document.querySelector(s); }
-function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
-function fmt(sec){ sec = Math.max(0, Math.floor(sec||0)); var m = Math.floor(sec/60), s = sec%60; return m + ':' + (s<10?'0':'') + s; }
-function fmtMB(bytes){ var mb = (bytes||0)/1048576; return mb >= 1024 ? (mb/1024).toFixed(2)+' GB' : mb.toFixed(1)+' MB'; }
-function isDownloaded(id){ return state.downloads.some(function(d){ return d.id === id; }); }
-function downloadOf(id){ return state.downloads.filter(function(d){ return d.id === id; })[0] || null; }
-function isLiked(id){ return state.liked.some(function(l){ return l.id === id; }); }
-function downloadedBytes(){ return state.downloads.reduce(function(s,d){ return s + (d.bytes||0); }, 0); }
+var artistSongCache = {};     // artist-lower -> { songs: [...], at }
+var ARTIST_CACHE_TTL = 10 * 60 * 1000;
 
 function artStyle(t){
   var grad = 'linear-gradient(140deg,' + ((t && t.c && t.c[0]) || '#333') + ',' + ((t && t.c && t.c[1]) || '#111') + ')';
   if (t && t.thumb) return 'background-image:url(\'' + t.thumb + '\'),' + grad;
   return 'background-image:' + grad;
 }
-function plArt(pl){
-  if (pl && pl.image) return 'background-image:url(\'' + pl.image + '\');background-size:cover;background-position:center;background-color:#241c12';
-  return 'background:linear-gradient(140deg,#e0a63f,#6e3c14)';
-}
-function playlistImageArt(pl){
-  return plArt(pl);
-}
-function toast(msg){
-  var el = $('#toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toast._t);
-  toast._t = setTimeout(function(){ el.classList.remove('show'); }, 2600);
-}
-function normTitle(s){
-  return String(s || '').toLowerCase()
-    .replace(/\((official|lyric|lyrics|audio|visualizer|hd|4k)[^)]*\)/g,' ')
-    .replace(/\[[^\]]*\]/g,' ')
-    .replace(/[^a-z0-9 ]/g,' ')
-    .replace(/\s+/g,' ').trim();
-}
 
-/* ------------------------------ backend ------------------------------ */
+/* ------------------------------ backend (search only) ------------------------------ */
 var Backend = {
   working: null,
   lastError: '',
   probeDone: false,
   _deadHosts: {},
 
-  hosts: function(){
-    var custom = String(state.settings.instance || '').trim().replace(/\/+$/, '');
-    if (custom && !/^https?:\/\//i.test(custom)) custom = 'https://' + custom;
-    var list = custom ? [custom] : [];
-    INVIDIOUS_FALLBACK.forEach(function(h){ if (list.indexOf(h) < 0) list.push(h); });
-    return list;
-  },
-
-  /* live Invidious instances (cached) win over the fallback; custom instance stays first */
   _listHosts: async function(){
     var custom = String(state.settings.instance || '').trim().replace(/\/+$/, '');
     if (custom && !/^https?:\/\//i.test(custom)) custom = 'https://' + custom;
@@ -1217,10 +894,6 @@ var Backend = {
     return out;
   },
 
-  /* Public instances flap: the same search URL that answers 200 with a CORS
-     header one second can drop the socket or lose the header the next. One
-     quick retry turns a good share of those misses into hits before we write
-     the host off for the session. 4xx still fails immediately (real answer). */
   _fetchRetry: async function(url, ms, tries){
     var last, i;
     tries = tries || 2;
@@ -1265,7 +938,6 @@ var Backend = {
     throw new Error(this.lastError || 'all instances failed');
   },
 
-  /* Invidious thumbnails may be relative paths — resolve against the host. */
   _thumb: function(host, thumbs){
     var pick = null;
     if (thumbs && thumbs.length){
@@ -1284,7 +956,6 @@ var Backend = {
     return absUrl(host, url);
   },
 
-  /* Invidious video item -> track */
   toTrack: function(it, host){
     if (!it || it.type !== 'video') return null;
     var vid = String(it.videoId || '').trim();
@@ -1300,7 +971,6 @@ var Backend = {
     };
   },
 
-  /* Invidious playlist item (search embed OR detail) -> track */
   _playlistVideo: function(host, it){
     var vid = String((it && it.videoId) || '').trim();
     if (!vid) return null;
@@ -1315,7 +985,6 @@ var Backend = {
     };
   },
 
-  /* classify + suppress music videos, dedupe */
   filter: function(items){
     var strict = state.settings.strictness === 'strict';
     var hidden = [], kept = [], seen = {};
@@ -1368,12 +1037,11 @@ var Backend = {
         if (p && p.title) alb.title = String(p.title || '').replace(/^Album\s*[–\-—]\s*/i, '').trim();
         if (p && p.author) alb.artist = String(p.author || '').trim() || alb.artist;
         var videos = (p && Array.isArray(p.videos)) ? p.videos : [];
-        if (!videos.length) videos = (it.videos || []);   /* detail endpoint may return empty — fall back to the search embed */
+        if (!videos.length) videos = (it.videos || []);
         if (!videos.length) throw new Error('no videos');
         alb.items = videos.map(function(v){ return self._playlistVideo(host, v); }).filter(Boolean);
         alb.items.forEach(function(t){ TRACK_MAP[t.id] = t; });
       } catch(e){
-        /* detail endpoint can be empty for YouTube playlists — use the search embed */
         var emb = (it.videos || []).map(function(v){ return self._playlistVideo(host, v); }).filter(Boolean);
         alb.items = emb;
         alb.items.forEach(function(t){ TRACK_MAP[t.id] = t; });
@@ -1398,8 +1066,6 @@ var Backend = {
     };
   },
 
-  /* audio resolution lives in the chain below: invidious -> cobalt (first validated success wins) */
-
   probe: async function(){
     try {
       var d = await this.get('/api/v1/search?q=test&type=video&page=1', 8000);
@@ -1413,68 +1079,23 @@ var Backend = {
     }
   }
 };
-
-/* ---------- fallback chain: invidious -> cobalt ---------- */
-Backend.resolveAudio = async function(videoId, kbps){
-  if (!videoId) throw new Error('no video id');
-  var start = Date.now();
-  var budget = 45000;
-  var errs = [];
-  var providers = [
-    { name: 'Invidious', fn: invidiousResolve },
-    { name: 'Cobalt',    fn: cobaltResolve }
-  ];
-  for (var i = 0; i < providers.length; i++){
-    if (Date.now() - start > budget) break;
-    try {
-      var got = await providers[i].fn(videoId, kbps);
-      if (got && got.url) return got;
-      errs.push(providers[i].name + ': empty result');
-    } catch (e) {
-      errs.push(providers[i].name + ': ' + (e && e.message ? e.message : 'failed'));
-    }
-  }
-  throw new Error(errs.join(' · ') || 'All audio providers failed');
-};
-
-
-/* ------------------------- official player (fallback) -------------------------
-   Measured 2026-11-22 from a real browser (Chrome 158) against the live network:
-
-     • Invidious search works and is CORS-friendly on both healthy instances.
-     • /api/v1/videos/<id>?local=true hands back instance-proxied audio
-       (206, content-type audio/mp4, Access-Control-Allow-Origin: *) — but only
-       for a small minority of tracks: 1 of 10 sampled resolved, and every
-       mainstream music upload 404'd "Video unavailable".
-     • Every reachable Cobalt instance answers error.api.auth.jwt.missing
-       (Turnstile-backed session required).
-
-   So a direct stream cannot be guaranteed for an arbitrary song. When one
-   cannot be resolved, playback falls back to the official embedded player:
-   audio only, the frame is offscreen, no keys, no backend, no ads injected by
-   us. The catch, and the UI says it plainly: that path cannot be downloaded.
-
-   Everything else in the app is unchanged — search, playlists, albums,
-   downloads, install. */
+/* --------------------------- official player --------------------------- */
+/* The ONLY playback engine. One embedded YouTube player, visible in the
+   now-playing sheet. No direct-audio providers, no downloads, no offline. */
 var OfficialPlayer = {
-  yt: null, loading: false, apiReady: false, failed: false,
-  active: false, videoId: null, startedAt: 0, hostId: 'officialHost',
+  yt: null, loading: false, apiReady: false, failed: false, active: false, videoId: null, seq: 0,
 
-  ensureHost: function(){
-    var host = document.getElementById(this.hostId);
+  frameEl: function(){
+    var wrap = document.getElementById('npVideoWrap');
+    if (!wrap) return null;
+    if (wrap.querySelector('iframe')) return wrap.querySelector('iframe');
+    var host = wrap.querySelector('#officialFrame');
     if (!host){
       host = document.createElement('div');
-      host.id = this.hostId;
-      host.setAttribute('aria-hidden', 'true');
-      host.style.cssText = 'position:fixed;left:-9999px;top:0;width:180px;height:100px;overflow:hidden;opacity:.02;pointer-events:none';
-      document.body.appendChild(host);
+      host.id = 'officialFrame';
+      wrap.appendChild(host);
     }
-    if (!document.getElementById('officialFrame')){
-      var inner = document.createElement('div');
-      inner.id = 'officialFrame';
-      host.appendChild(inner);
-    }
-    return true;
+    return host;
   },
 
   loadApi: function(){
@@ -1492,20 +1113,21 @@ var OfficialPlayer = {
 
   ensurePlayer: function(){
     if (this.yt || !window.YT || !window.YT.Player) return;
+    if (!this.frameEl()) return;
     try {
       this.yt = new window.YT.Player('officialFrame', {
-        height: '100', width: '180',
-        playerVars: { autoplay:0, controls:0, disablekb:1, playsinline:1, rel:0, iv_load_policy:3, origin: location.origin },
+        height: '100%', width: '100%',
+        playerVars: { autoplay: 0, controls: 0, disablekb: 1, playsinline: 1, rel: 0, modestbranding: 1, iv_load_policy: 3, cc_load_policy: 0, origin: location.origin },
         events: {
           onReady: function(){ try { OfficialPlayer.yt.setVolume(100); } catch(e){} },
           onStateChange: function(ev){
-            if (ev.data === 0){ if (state.playing) step(1); }
-            else if (ev.data === 1){
+            if (ev.data === 0){
+              if (state.playing) step(1);
+            } else if (ev.data === 1){
               var d = OfficialPlayer.duration(), cur = currentTrack();
               if (d > 0 && cur && !cur.dur){ cur.dur = Math.round(d); paintProgress(); }
               state.playing = true; syncPlayer();
-            }
-            else if (ev.data === 2){ state.playing = false; syncPlayer(); }
+            } else if (ev.data === 2){ state.playing = false; syncPlayer(); }
             else if (ev.data === 3){
               var d2 = OfficialPlayer.duration(), cur2 = currentTrack();
               if (d2 > 0 && cur2 && !cur2.dur){ cur2.dur = Math.round(d2); paintProgress(); }
@@ -1514,7 +1136,7 @@ var OfficialPlayer = {
           onError: function(ev){
             OfficialPlayer.active = false;
             state.playing = false;
-            toast('Official player could not play this track (' + ev.data + ')');
+            toast('YouTube could not play this track (error ' + ev.data + ')');
             syncPlayer();
           }
         }
@@ -1524,25 +1146,27 @@ var OfficialPlayer = {
 
   play: function(videoId){
     var self = this;
+    var seq = ++this.seq;
     this.active = true;
     this.videoId = videoId;
-    this.startedAt = Date.now();
-    this.ensureHost();
+    this.frameEl();
     if (!this.apiReady) this.loadApi();
     var tries = 0;
     var wait = setInterval(function(){
       tries++;
-      self.ensureHost();
+      self.frameEl();
       self.ensurePlayer();
-      if (self.yt && self.yt.loadVideoById){
+      if (self.yt && self.yt.loadVideoById && seq === self.seq){
         clearInterval(wait);
         try { self.yt.loadVideoById(videoId); self.yt.playVideo(); } catch(e){}
-      } else if (self.failed || tries > 100){
+      } else if (self.failed || tries > 150){
         clearInterval(wait);
-        self.active = false;
-        state.playing = false;
-        toast('Could not start the official player — check your connection');
-        syncPlayer();
+        if (seq === self.seq){
+          self.active = false;
+          state.playing = false;
+          toast('Could not connect to the YouTube player — check your connection');
+          syncPlayer();
+        }
       }
     }, 200);
   },
@@ -1553,9 +1177,7 @@ var OfficialPlayer = {
   },
   pause: function(){ if (this.yt && this.yt.pauseVideo) try { this.yt.pauseVideo(); } catch(e){} },
   resume: function(){ if (this.yt && this.yt.playVideo) try { this.yt.playVideo(); } catch(e){} },
-  seek: function(secs){
-    if (this.yt && this.yt.seekTo) try { this.yt.seekTo(secs, true); } catch(e){}
-  },
+  seek: function(secs){ if (this.yt && this.yt.seekTo) try { this.yt.seekTo(secs, true); } catch(e){} },
   position: function(){
     if (this.yt && this.yt.getCurrentTime){
       try {
@@ -1576,106 +1198,28 @@ var OfficialPlayer = {
   }
 };
 
-/* Tracks that arrive without a duration (pasted links, some search hits) get
-   their length from the player itself, so the seek bar and the progress maths
-   work the same on both engines. */
 function trackDur(t){
   if (!t) return 0;
   if (t.dur) return t.dur;
   var d = OfficialPlayer.duration();
-  if (d > 0){ t.dur = Math.round(d); return t.dur; }
+  if (d > 0){ t.dur = d; return d; }
   return 0;
 }
 
-/* ------------------------------ player ------------------------------
-   Audio-only playback. Preferred path: the resolved stream through a plain
-   <audio> element (downloadable, plays offline). Fallback: the official
-   embedded player in OfficialPlayer above, when no stream can be resolved. */
+/* ------------------------------ player facade ------------------------------ */
 var Player = {
-  el: null, blobUrl: null, useBlob: false, seq: 0,
-
-  ensureEl: function(){
-    if (!this.el) this.el = $('#blobAudio');
-    if (this.el && !this.el._bound){
-      this.el._bound = true;
-      var self = this;
-      this.el.addEventListener('ended', function(){
-        var tk = Player._playSeq;
-        if (!state.playing) return;
-        step(1);
-      });
-      this.el.addEventListener('error', function(){
-        if (!state.playing) return;
-        var t = currentTrack();
-        if (!t) return;
-        state.playing = false;
-        toast('Couldn’t load audio for “' + t.title + '” — the instance may be down');
-        syncPlayer();
-      });
-    }
-    return this.el;
-  },
-
-  stop: function(){
-    OfficialPlayer.stop();
-    this.seq++;
-    this._playSeq = 0;
-    if (this.el){
-      try { this.el.pause(); } catch(e){}
-      try { this.el.removeAttribute('src'); this.el.load(); } catch(e){}
-    }
-    if (this.blobUrl){ try { URL.revokeObjectURL(this.blobUrl); } catch(e){} this.blobUrl = null; }
-    this.useBlob = false;
-  },
-
-  playUrl: function(url){
-    var el = this.ensureEl(); if (!el) return;
-    var seq = ++this.seq; this._playSeq = seq;
-    this.useBlob = false;
-    el.preload = 'auto';
-    el.src = url;
-    el.play().catch(function(){});
-  },
-
-  playBlob: function(blob){
-    var el = this.ensureEl(); if (!el) return;
-    var seq = ++this.seq; this._playSeq = seq;
-    if (this.blobUrl) try { URL.revokeObjectURL(this.blobUrl); } catch(e){}
-    this.blobUrl = URL.createObjectURL(blob);
-    this.useBlob = true;
-    el.preload = 'auto';
-    el.src = this.blobUrl;
-    el.play().catch(function(){});
-  },
-
-  pause: function(){
-    if (OfficialPlayer.active){ OfficialPlayer.pause(); return; }
-    var el = this.ensureEl(); if (el) try { el.pause(); } catch(e){}
-  },
-  resume: function(){
-    if (OfficialPlayer.active){ OfficialPlayer.resume(); return; }
-    var el = this.ensureEl(); if (el) try { el.play().catch(function(){}); } catch(e){}
-  },
-
+  seq: 0,
+  stop: function(){ OfficialPlayer.stop(); this.seq++; },
+  pause: function(){ OfficialPlayer.pause(); },
+  resume: function(){ OfficialPlayer.resume(); },
   seek: function(pct){
     var t = currentTrack(); if (!t) return;
-    var secs = (pct/100) * trackDur(t);
-    if (OfficialPlayer.active){ OfficialPlayer.seek(secs); state.progress = secs; return; }
-    var el = this.ensureEl();
-    if (el && el.src){ try { el.currentTime = secs; } catch(e){} }
+    var secs = (pct / 100) * trackDur(t);
+    OfficialPlayer.seek(secs);
     state.progress = secs;
   },
-
-  position: function(){
-    if (OfficialPlayer.active) return OfficialPlayer.position();
-    var el = this.ensureEl();
-    if (el && el.src){
-      try { return el.currentTime || 0; } catch(e){}
-    }
-    return null;
-  }
+  position: function(){ return OfficialPlayer.position(); }
 };
-
 /* ------------------------------ player state ------------------------------ */
 function currentTrack(){ return state.idx >= 0 ? TRACK_MAP[state.queue[state.idx]] : null; }
 
@@ -1688,66 +1232,18 @@ function playTrack(id, queue){
   if (state.idx < 0){ state.queue.push(id); state.idx = state.queue.length - 1; }
   state.playing = true;
   state.progress = 0;
-  bufferingSince = 0; bufferingWarned = false;
   lyricsReset(false);
   pushRecent(id);
   startTicker();
   loadAndPlay(t);
   syncPlayer();
   setSessionMeta();
-  /* album context for smart shuffle */
-  markTrack(t.id);
-  if (t.albumId){
-    featuredAlbumId = t.albumId;
-    if (albumContext && albumContext.kind === 'album' && albumContext.id !== t.albumId){
-      albumContext = null; clearAutoDone();   // user tapped another album — fresh start
-    }
-  }
 }
 
 async function loadAndPlay(t){
   var seq = ++Player.seq;
-  var dl = downloadOf(t.id);
-  if (dl && dl.kind === 'audio'){
-    var rec = await dbGet('blobs', t.id);
-    if (seq !== Player.seq) return;
-    if (rec && rec.data instanceof Blob){
-      Player.playBlob(rec.data);
-      toast('Playing downloaded copy (offline)');
-      return;
-    }
-  }
-  if (t.source === 'demo'){
-    Player.pause();
-    return; /* simulated */
-  }
-  var kbps = state.settings.streamQuality === 'saver' ? 64
-    : state.settings.streamQuality === 'high' ? 256
-    : 128;
-  try {
-    var got = await Backend.resolveAudio(t.id, kbps);
-    if (seq !== Player.seq) return; /* superseded */
-    state.audioSource = { name: got.provider, host: got.host, bitrate: got.bitrate, at: Date.now() };
-    Player.playUrl(got.url);
-  } catch(e){
-    if (seq !== Player.seq) return;
-    var t2 = currentTrack();
-    /* No direct stream for this track. Unless the user pinned Direct-only,
-       play it through the official embedded player instead of failing. */
-    if (state.settings.engine !== 'direct' && t2 && t2.id){
-      state.lastResolveError = fmtResolveError(e);
-      state.audioSource = { name: 'official', host: '', bitrate: null, at: Date.now() };
-      OfficialPlayer.play(t2.id);
-      state.playing = true;
-      toast('No public audio stream for this track — playing it on the official player');
-      syncPlayer();
-      return;
-    }
-    state.playing = false;
-    state.audioSource = null;
-    if (t2) toast('Couldn’t load audio for “' + t2.title + '” — ' + fmtResolveError(e));
-    syncPlayer();
-  }
+  OfficialPlayer.play(t.id);
+  syncPlayer();
 }
 
 function lyricsReset(keepOpen){
@@ -1770,19 +1266,22 @@ function togglePlay(){
 function step(dir){
   if (!state.queue.length) return;
   if (state.shuffle && dir > 0 && !state.repeat){
-    smartNextTrack();
-    return;
+    var others = state.queue.filter(function(x){ return x !== currentTrack().id; });
+    if (others.length){
+      var pick = others[Math.floor(Math.random() * others.length)];
+      state.idx = state.queue.indexOf(pick);
+    }
+  } else {
+    var i = state.idx + dir;
+    if (i >= state.queue.length) i = state.repeat ? 0 : -1;
+    if (i < 0) i = state.repeat ? state.queue.length - 1 : 0;
+    state.idx = i;
   }
-  var i = state.idx + dir;
-  if (i >= state.queue.length) i = state.repeat ? 0 : -1;
-  if (i < 0) i = state.repeat ? state.queue.length - 1 : 0;
-  state.idx = i;
   state.progress = 0;
   state.playing = true;
   Player.stop();
   lyricsReset(false);
   var t = currentTrack();
-  if (t) markTrack(t.id);
   if (t){
     loadAndPlay(t);
     setSessionMeta();
@@ -1797,28 +1296,12 @@ function startTicker(){
     var t = currentTrack();
     if (!t || !state.playing) return;
     var pos = Player.position();
-    if (pos !== null && !isNaN(pos)){
-      state.progress = pos;
-      watchdog(pos);
-    } else {
-      state.progress += 0.5;
-      var td = trackDur(t);
-      if (td && state.progress >= td) { step(1); return; }
-    }
+    if (pos !== null && !isNaN(pos)) state.progress = pos;
+    else state.progress += 0.5;
     paintProgress();
   }, 500);
 }
 
-var bufferingSince = 0, bufferingWarned = false;
-function watchdog(pos){
-  if (pos > 0.2){ bufferingSince = 0; bufferingWarned = false; return; }
-  if (!state.playing) return;
-  if (!bufferingSince){ bufferingSince = Date.now(); return; }
-  if (!bufferingWarned && Date.now() - bufferingSince > 10000){
-    bufferingWarned = true;
-    toast('Audio is not starting — the instance or your connection may be blocking the stream');
-  }
-}
 function paintProgress(){
   var t = currentTrack();
   if (!t) return;
@@ -1833,7 +1316,7 @@ function paintProgress(){
 }
 
 function pushRecent(id){
-  state.recent = [id].concat(state.recent.filter(function(x){ return x !== id; })).slice(0, 12);
+  state.recent = [id].concat(state.recent.filter(function(x){ return x !== id; })).slice(0, 20);
   LS.set('sonora.recent', state.recent);
 }
 
@@ -1844,23 +1327,14 @@ function syncPlayer(){
     mini.hidden = false;
     $('#miniArt').setAttribute('style', artStyle(t) + ';background-size:cover');
     $('#miniTitle').textContent = t.title;
-    $('#miniArtist').textContent = t.artist + (isDownloaded(t.id) ? ' · offline' : '');
+    $('#miniArtist').textContent = t.artist;
     $('#miniToggle').innerHTML = state.playing ? ICONS.pause : ICONS.play;
 
-    $('#npArt').setAttribute('style', artStyle(t));
     $('#npTitle').textContent = t.title;
     $('#npArtist').textContent = t.artist;
     $('#npDur').textContent = fmt(t.dur);
     $('#npToggleBtn').innerHTML = state.playing ? ICONS.pause : ICONS.play;
-    var dl = downloadOf(t.id);
-    $('#npQual').textContent = (dl && dl.kind === 'audio' ? 'OFFLINE · '
-      : (state.audioSource && state.audioSource.name === 'official') ? 'OFFICIAL PLAYER · '
-      : 'DIRECT AUDIO · ') +
-      (QUAL_LABEL[state.settings.streamQuality] || 'Auto').toUpperCase();
-    $('#npLike').innerHTML = isLiked(t.id) ? ICONS.heartF : ICONS.heart;
-    $('#npLike').style.color = isLiked(t.id) ? 'var(--accent)' : '';
-    $('#npDl').innerHTML = isDownloaded(t.id) ? ICONS.downloaded : ICONS.download;
-    $('#npDl').style.color = isDownloaded(t.id) ? 'var(--accent)' : '';
+    $('#npQual').textContent = 'OFFICIAL PLAYER';
     $('#shufBtn').classList.toggle('on', state.shuffle);
     $('#repBtn').classList.toggle('on', state.repeat);
     var lyrBtn = $('#npLyricsBtn');
@@ -1881,10 +1355,8 @@ function setSessionMeta(){
   var t = currentTrack(); if (!t) return;
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: t.title, artist: t.artist, album: 'Sonora',
-      artwork: [{ src: ICON_512, sizes:'512x512', type:'image/png' }]
+      title: t.title, artist: t.artist, album: t.album || 'Sonora'
     });
-    /* Lock screen: play/pause + skip to next/previous song — never ±10s */
     navigator.mediaSession.setActionHandler('play', function(){ togglePlay(); });
     navigator.mediaSession.setActionHandler('pause', function(){ togglePlay(); });
     navigator.mediaSession.setActionHandler('nexttrack', function(){ step(1); });
@@ -1911,167 +1383,103 @@ function syncSessionPosition(){
   } catch(e){}
 }
 
-/* ------------------------------ library ops ------------------------------ */
-function newPlaylist(name){
-  var pl = { id:'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: name || ('My Playlist #' + (state.playlists.length + 1)), tracks:[], createdAt: Date.now() };
-  state.playlists.push(pl);
-  dbPut('playlists', pl);
-  return pl;
-}
-function addToPlaylist(plId, trackId){
-  var pl = state.playlists.filter(function(p){ return p.id === plId; })[0];
-  if (!pl) return;
-  if (pl.tracks.indexOf(trackId) >= 0){ toast('Already in “' + pl.name + '”'); return; }
-  pl.tracks.push(trackId);
-  dbPut('playlists', pl);
-  toast('Added to “' + pl.name + '”');
-  render();
-}
-function toggleLike(id){
-  var i = -1;
-  state.liked.forEach(function(l, k){ if (l.id === id) i = k; });
-  if (i >= 0){ state.liked.splice(i,1); dbDel('liked', id); toast('Removed from Liked Songs'); }
-  else { state.liked.push({ id:id, at:Date.now() }); dbPut('liked', { id:id, at:Date.now() }); toast('Added to Liked Songs'); }
-  render(); syncPlayer();
-}
-function saveAlbum(alb){
-  var rec = {
-    id: alb.id, title: alb.title, artist: alb.artist, thumb: alb.thumb,
-    items: (alb.items || []).map(function(t){ return t.id; }),
-    at: Date.now()
-  };
-  var existing = -1;
-  state.albums.forEach(function(a, i){ if (a.id === alb.id) existing = i; });
-  if (existing >= 0){ state.albums.splice(existing,1); dbDel('albums', alb.id); toast('Album removed from library'); }
-  else { state.albums.push(rec); dbPut('albums', rec); toast('Album saved'); }
-  render();
+/* ------------------------------ lyrics ------------------------------ */
+var lyrCache = {};
+var lyrLoading = {};
+var lyricsState = { open:false, trackId:null, synced:null, plain:null, curLine:-1, err:false };
+
+function parseSynced(lyrics){
+  var lines = String(lyrics || '').split(/\r?\n/);
+  var out = [];
+  lines.forEach(function(l){
+    var m = l.match(/\[(\d+):(\d+)(?:\.(\d+))?\](.*)/);
+    if (!m) return;
+    var t = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + (m[3] ? parseInt(m[3], 10) / (m[3].length === 3 ? 1000 : 10) : 0);
+    var text = m[4].replace(/<[^>]+>/g, '').trim();
+    if (text) out.push({ time: t, line: text });
+  });
+  return out;
 }
 
-/* downloads: two tiers — real offline audio when an instance can serve it,
-   otherwise a library save (metadata only, plays with network) */
-async function downloadTrack(id){
-  var t = TRACK_MAP[id];
-  if (!t) return;
-  if (isDownloaded(id)){ toast('Already saved'); return; }
-  var kbps = KBPS[state.settings.downloadQuality] || 128;
-  var cap = state.settings.capMB * 1048576;
-
-  if (state.settings.downloadMode === 'audio' && t.source !== 'demo'){
-    toast('Looking for an audio stream…');
+function lyricsFor(trackId){
+  var t = TRACK_MAP[trackId];
+  if (!t) return Promise.resolve(null);
+  var hit = lyrCache[trackId];
+  if (hit && Date.now() - hit.at < 60 * 60 * 1000) return Promise.resolve(hit);
+  return (async function(){
+    var text = null, synced = null;
     try {
-      var got = await Backend.resolveAudio(id, kbps);
-      state.audioSource = { name: got.provider, host: got.host, bitrate: got.bitrate, at: Date.now() };
-      var res = await fetch(got.url);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      var blob = await res.blob();
-      if (!blob || blob.size < 2048) throw new Error('empty stream');
-      if (downloadedBytes() + blob.size > cap){ toast('Storage cap reached — raise it in Settings'); return; }
-      var rec = {
-        id: id, title: t.title, artist: t.artist, thumb: t.thumb || '',
-        kbps: got.bitrate || kbps, bytes: blob.size, kind:'audio', at: Date.now()
-      };
-      state.downloads.push(rec);
-      await dbPut('downloads', rec);
-      await dbPut('blobs', { id: id, data: blob });
-      toast('Downloaded · ' + rec.kbps + ' kbps · ' + fmtMB(blob.size) + ' · plays offline');
-      render(); syncPlayer();
+      var url = 'https://lrclib.net/api/get?track_name=' + encodeURIComponent(t.title) + '&artist_name=' + encodeURIComponent(t.artist || '');
+      var res = await fetch(url, { cache:'no-store', signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+      if (res.ok){
+        var d = await res.json();
+        if (d && d.plainLyrics) text = d.plainLyrics;
+        if (d && d.syncedLyrics) synced = parseSynced(d.syncedLyrics);
+      }
+    } catch (e) {}
+    if (!text){
+      try {
+        var url2 = 'https://api.lyrics.ovh/v1/' + encodeURIComponent(t.artist || '') + '/' + encodeURIComponent(t.title);
+        var res2 = await fetch(url2, { cache:'no-store', signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
+        if (res2.ok){
+          var d2 = await res2.json();
+          if (d2 && d2.lyrics) text = d2.lyrics;
+        }
+      } catch (e) {}
+    }
+    if (!text) return null;
+    var entry = { text: text, synced: synced, at: Date.now() };
+    lyrCache[trackId] = entry;
+    return entry;
+  })();
+}
+
+function renderLyrics(t){
+  var wrap = $('#npLyricsWrap');
+  var bodyEl = $('#npLyricsBody');
+  if (!wrap || !bodyEl) return;
+  if (lyricsState.open){ wrap.hidden = false; }
+  if (!lyricsState.open){ wrap.hidden = true; return; }
+  bodyEl.innerHTML = '<div class="lyrics-status">Fetching lyrics…</div>';
+  lyricsFor(t.id).then(function(entry){
+    if (!lyricsState.open) return;
+    if (!entry){
+      bodyEl.innerHTML = '<div class="lyrics-status">Lyrics unavailable for this track.</div>';
       return;
-    } catch(e){
-      toast('No instance can serve audio right now — saving to your library instead');
     }
-  }
-
-  var bytes = Math.round((t.dur || 0) * kbps * 1000 / 8);
-  if (downloadedBytes() + bytes > cap){ toast('Storage cap reached — raise it in Settings'); return; }
-  var lib = {
-    id: id, title: t.title, artist: t.artist, thumb: t.thumb || '',
-    kbps: kbps, bytes: bytes, kind:'library', at: Date.now()
-  };
-  state.downloads.push(lib);
-  await dbPut('downloads', lib);
-  toast('Saved to library · ' + fmtMB(bytes) + ' est. · needs network to play');
-  render(); syncPlayer();
-}
-
-/* ---------- crude device download (YouTube → audio file) ---------- */
-function _sanitizeFilename(s){
-  return String(s || 'audio')
-    .replace(/[\/\\?%*:|"<>]+/g, ' ')
-    .replace(/\s+/g, ' ').trim().slice(0, 80) || 'audio';
-}
-function _audioExt(ct, url){
-  ct = String(ct || '').toLowerCase();
-  if (ct.indexOf('mpeg') >= 0 || ct.indexOf('mp3') >= 0) return 'mp3';
-  if (ct.indexOf('wav') >= 0) return 'wav';
-  if (ct.indexOf('flac') >= 0) return 'flac';
-  if (ct.indexOf('ogg') >= 0 || ct.indexOf('opus') >= 0) return 'opus';
-  if (ct.indexOf('webm') >= 0) return 'webm';
-  if (ct.indexOf('mp4') >= 0 || ct.indexOf('m4a') >= 0 || ct.indexOf('aac') >= 0) return 'm4a';
-  var m = String(url || '').match(/\.(mp3|m4a|opus|ogg|wav|flac|webm)(?:[?#]|$)/i);
-  if (m) return m[1].toLowerCase();
-  return 'mp3';
-}
-
-async function downloadAudioFile(id){
-  var t = TRACK_MAP[id];
-  if (!t) return;
-  if (t.source === 'demo'){ toast('Demo tracks can’t be downloaded'); return; }
-  toast('Resolving audio…');
-  try {
-    var got = await Backend.resolveAudio(id, 128);
-    toast('Downloading audio…');
-    var res = await fetch(got.url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var blob = await res.blob();
-    if (!blob || blob.size < 2048) throw new Error('empty stream');
-    var ct = (blob.type || res.headers.get('content-type') || '').toLowerCase();
-    /* Never hand the user a 200-byte JSON error dressed up as a song. The
-       instances do answer 200 + application/json for unavailable videos. */
-    if (/json|text\/html|text\/plain/.test(ct)) throw new Error('provider returned ' + ct + ', not audio');
-    var ext = _audioExt(ct, got.url);
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'Sonora - ' + _sanitizeFilename(t.title) + '.' + ext;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 6000);
-    toast('Audio saved as .' + ext + ' · ' + fmtMB(blob.size) + ' · ' + (PROVIDER_LABEL[got.provider] || got.provider));
-  } catch(e){
-    if (state.settings.engine !== 'direct'){
-      toast('No downloadable stream for this track — a file can only be saved when a direct audio stream resolves');
+    if (entry.synced && entry.synced.length){
+      bodyEl.innerHTML = entry.synced.map(function(x, i){ return '<div class="lyrics-line" data-i="' + i + '">' + esc(x.line) + '</div>'; }).join('');
     } else {
-      toast('Audio download failed — ' + fmtResolveError(e));
+      bodyEl.innerHTML = '<div class="lyrics-plain">' + esc(entry.text).replace(/\n/g, '<br>') + '</div>';
     }
-  }
-}
-
-async function removeDownload(id){
-  state.downloads = state.downloads.filter(function(d){ return d.id !== id; });
-  await dbDel('downloads', id);
-  await dbDel('blobs', id);
-  toast('Download deleted');
-  render(); syncPlayer();
-}
-
-/* ------------------------------ demo fallback ------------------------------ */
-var DEMO_TRACKS = [
-  { id:'demo1', title:'Paper Lanterns', artist:'Neon Harbor', dur:214, source:'demo', c:['#2b5876','#4e4376'] },
-  { id:'demo2', title:'Undertow', artist:'Glass Coast', dur:229, source:'demo', c:['#0f2027','#2c5364'] },
-  { id:'demo3', title:'Slow Heat', artist:'Ivy Meridian', dur:205, source:'demo', c:['#76223a','#b45309'] },
-  { id:'demo4', title:'Paper Cities', artist:'Lumen Field', dur:248, source:'demo', c:['#134e5e','#71b280'] },
-  { id:'demo5', title:'Afterglow', artist:'Sable & The Quiet', dur:276, source:'demo', c:['#41295a','#2f0743'] }
-];
-DEMO_TRACKS.forEach(function(t){ TRACK_MAP[t.id] = t; });
-
-function demoSearch(q){
-  var n = normTitle(q);
-  return DEMO_TRACKS.filter(function(t){
-    return n.length < 2 || normTitle(t.title + ' ' + t.artist).indexOf(n) >= 0;
+    lyricsState.synced = entry.synced; lyricsState.plain = entry.text;
+    lyricsTick();
+  }).catch(function(){
+    if (!lyricsState.open) return;
+    bodyEl.innerHTML = '<div class="lyrics-status">Lyrics unavailable for this track.</div>';
   });
 }
 
+function lyricsTick(){
+  var wrap = $('#npLyricsWrap');
+  var bodyEl = $('#npLyricsBody');
+  if (!wrap || wrap.hidden) return;
+  if (!lyricsState.synced || !lyricsState.synced.length) return;
+  var pos = state.progress || 0;
+  var idx = -1;
+  for (var i = 0; i < lyricsState.synced.length; i++){
+    if (pos >= lyricsState.synced[i].time) idx = i;
+  }
+  if (idx === lyricsState.curLine) return;
+  lyricsState.curLine = idx;
+  var lines = bodyEl.querySelectorAll('.lyrics-line');
+  lines.forEach(function(el){ el.classList.toggle('cur', Number(el.dataset.i) === idx); });
+  var active = bodyEl.querySelector('.lyrics-line.cur');
+  if (active){
+    var target = active.offsetTop - (bodyEl.clientHeight / 2) + (active.clientHeight / 2);
+    bodyEl.scrollTop = Math.max(0, target);
+  }
+}
 /* ------------------------------ rendering ------------------------------ */
 function render(){
   renderTopbar();
@@ -2081,19 +1489,14 @@ function render(){
 }
 
 function renderTopbar(){
-  var titles = { home:'Sonora', search:'Search', library:'Your Library', settings:'Settings', playlist:'Playlist', album:'Album' };
-  var showBack = (state.view === 'settings' || state.view === 'playlist' || state.view === 'album');
+  var titles = { home:'Sonora', search:'Search', library:'Recently played', settings:'Settings', album:'Album' };
+  var showBack = (state.view === 'settings' || state.view === 'album');
   var label = titles[state.view] || 'Sonora';
-  if (state.view === 'playlist' && state.activePlaylist) label = state.activePlaylist.name;
   if (state.view === 'album' && state.activeAlbumObj) label = state.activeAlbumObj.title || 'Album';
 
-  var chip = state.net === 'online'
-    ? '<span id="statusChip" class="statuschip">LIVE</span>'
-    : state.net === 'down'
-      ? (navigator.onLine === false
-          ? '<span id="statusChip" class="statuschip err">OFFLINE</span>'
-          : '<span id="statusChip" class="statuschip err">NO INSTANCES</span>')
-      : '<span id="statusChip" class="statuschip off">…</span>';
+  var chip = navigator.onLine === false
+    ? '<span id="statusChip" class="statuschip err">OFFLINE</span>'
+    : '<span id="statusChip" class="statuschip">YOUTUBE</span>';
 
   $('#pageTitle').innerHTML = esc(label) + ' ' + chip;
 
@@ -2108,32 +1511,28 @@ function renderTopbar(){
 }
 
 function renderTabs(){
-  var map = { home:'home', search:'search', library:'library' };
-  var names = { home:'Home', search:'Search', library:'Library' };
+  var names = { home:'Home', search:'Search', library:'Recent' };
+  var icons = { home:'home', search:'search', library:'clock' };
   Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), function(btn){
     var id = btn.dataset.tab;
-    btn.innerHTML = ICONS[map[id]] + '<span>' + names[id] + '</span>';
+    btn.innerHTML = ICONS[icons[id]] + '<span>' + names[id] + '</span>';
     btn.classList.toggle('on', state.tab === id);
   });
 }
 
 function trackRow(t){
   if (!t) return '';
-  var dl = downloadOf(t.id);
-  var tail = '';
-  if (dl) tail += (dl.kind === 'audio' ? ICONS.downloaded : ICONS.download);
-  else tail += '<span class="dur">' + (t.dur ? fmt(t.dur) : '—') + '</span>';
-  tail += '<button class="iconbtn" style="width:30px;height:30px" data-act="menu" data-id="' + t.id + '" aria-label="More">' + ICONS.dots + '</button>';
   return '<div class="row" data-act="play" data-id="' + t.id + '">' +
     '<div class="art" style="' + artStyle(t) + '"></div>' +
     '<div class="meta"><div class="t">' + esc(t.title) + '</div>' +
     '<div class="s">' + esc(t.artist) + (t.album ? ' · ' + esc(t.album) : '') + '</div></div>' +
-    '<div class="tail">' + tail + '</div></div>';
+    '<div class="tail"><span class="dur">' + (t.dur ? fmt(t.dur) : '—') + '</span>' +
+    '<button class="iconbtn" style="width:30px;height:30px" data-act="menu" data-id="' + t.id + '" aria-label="More">' + ICONS.dots + '</button></div></div>';
 }
 
 function albumCard(a){
   return '<button class="card" data-act="openalbum" data-id="' + a.id + '">' +
-    '<div class="art" style="' + artStyle(a) + '"><span class="badge-audio">AUDIO</span></div>' +
+    '<div class="art" style="' + artStyle(a) + '"><span class="badge-audio">ALBUM</span></div>' +
     '<div class="t">' + esc(a.title || 'Album') + '</div>' +
     '<div class="s">' + esc(a.artist || '') + '</div></button>';
 }
@@ -2165,34 +1564,25 @@ function viewHome(){
   var hour = new Date().getHours();
   var greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   var recents = state.recent.map(function(id){ return TRACK_MAP[id]; }).filter(Boolean).slice(0, 6);
-  var savedAlbums = state.albums.slice(0, 8);
 
   var html = '<div class="viewfade">';
   html += '<div class="hero"><h2>' + greet + '</h2>';
   html += '<div class="quickgrid">';
-  state.playlists.slice(0, 4).forEach(function(pl){
-    html += '<button class="quick" data-act="openplaylist" data-id="' + pl.id + '">' +
-      '<div class="art" style="' + plArt(pl) + '"></div><span>' + esc(pl.name) + '</span></button>';
-  });
-  html += '<button class="quick" data-act="open-liked"><div class="art" style="background:linear-gradient(140deg,#e0a63f,#6e3c14)"></div><span>Liked Songs</span></button>';
   html += '<button class="quick" data-act="go-search"><div class="art" style="background:linear-gradient(140deg,#4e4376,#2b5876)"></div><span>Find music</span></button>';
+  html += '<a class="quick" href="https://music.youtube.com/" target="_blank" rel="noopener"><div class="art" style="background:linear-gradient(140deg,#7a2020,#311111)"></div><span>Music on YouTube ↗</span></a>';
   html += '</div></div>';
 
   html += installHintHTML();
 
-  if (savedAlbums.length){
-    html += '<section class="sec"><div class="sec-head"><h3>Your albums</h3><span class="more">SAVED</span></div>' +
-      '<div class="shelf">' + savedAlbums.map(albumCard).join('') + '</div></section>';
-  }
-
   html += '<section class="sec"><div class="sec-head"><h3>Recently played</h3></div><div class="rows">' +
     (recents.length ? recents.map(trackRow).join('')
-      : '<div class="empty"><div class="big">Nothing yet</div><p>Search for a song — song, artist or album.</p></div>') +
+      : '<div class="empty"><div class="big">Nothing yet</div><p>Search for a song — a track, an artist or an album.</p></div>') +
     '</div></section>';
 
-  if (state.searchError || state.net === 'down'){
+  if (state.searchError){
     html += '<div class="errbox"><b>Search servers unreachable</b>' +
-      'The public instances Sonora uses are down or rate-limited. <code>' + esc(Backend.lastError || '') + '</code>' +
+      'The public instances Sonora uses are down or rate-limited, so search is unavailable right now. ' +
+      '<code>' + esc(state.searchError) + '</code>' +
       '<button class="retry" data-act="retry-net">Retry now</button></div>';
   }
 
@@ -2207,7 +1597,7 @@ function searchShellHTML(){
     '</div>';
   return '<div class="viewfade" id="searchView">' +
     '<div class="searchwrap"><div class="searchbox">' + ICONS.search +
-    '<input id="searchInput" type="search" placeholder="Songs, artists, albums" value="' + esc(state.query) + '" autocomplete="off" spellcheck="false" enterkeyhint="search"></div></div>' +
+    '<input id="searchInput" type="search" placeholder="Songs, artists, albums — or paste a YouTube link" value="' + esc(state.query) + '" autocomplete="off" spellcheck="false" enterkeyhint="search"></div></div>' +
     chips +
     '<div id="searchResults">' + searchResultsHTML() + '</div></div>';
 }
@@ -2216,7 +1606,7 @@ function searchResultsHTML(){
   var q = state.query.trim();
   var html = '';
   if (!q){
-    html += '<div class="note" style="margin-top:16px"><b>Clean audio results.</b> Songs and albums from YouTube Music, checked for music videos before they show up.</div>';
+    html += '<div class="note" style="margin-top:16px"><b>Official player, no tricks.</b> Results are found by public instances, checked for music videos before they show up, and play in the official YouTube player — nothing else. Paste a YouTube link to play it directly.</div>';
     if (state.net === 'down'){
       html += '<div class="errbox"><b>Search is offline</b>None of the public instances answered. ' +
         '<code>' + esc(Backend.lastError || '') + '</code><button class="retry" data-act="retry-net">Try again</button></div>';
@@ -2233,7 +1623,7 @@ function searchResultsHTML(){
 
   if (state.searchError){
     html += '<div class="errbox"><b>Couldn’t reach any search instance</b>' +
-      'This is the usual failure mode of free public instances. Your library and downloads still work.' +
+      'This is the usual failure mode of free public instances. Paste a YouTube link if you know one. ' +
       '<code>' + esc(state.searchError) + '</code>' +
       '<button class="retry" data-act="retry-search">Retry search</button></div>';
   }
@@ -2284,92 +1674,20 @@ function renderSearchResultsOnly(){
   if (res) res.innerHTML = searchResultsHTML();
 }
 
-function viewLibrary(){
-  var tabs = [['playlists','Playlists'],['albums','Albums'],['liked','Liked'],['downloads','Downloads']];
+function viewRecent(){
+  var recents = state.recent.map(function(id){ return TRACK_MAP[id]; }).filter(Boolean).slice(0, 20);
   var html = '<div class="viewfade">';
-  html += '<div class="libhead"><span class="lib-title" style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--muted2)">LIBRARY</span>' +
-    '<div style="display:flex;gap:8px">' +
-    '<button class="addbtn" data-act="export-playlists">' + ICONS.export + 'Export</button>' +
-    '<button class="addbtn" data-act="import-playlists">' + ICONS.cloudDown + 'Import</button>' +
-    '<button class="addbtn" data-act="newplaylist">' + ICONS.plus + 'Playlist</button></div></div>';
-  html += '<div class="chips">' + tabs.map(function(t){
-    return '<button class="chip' + (state.libTab === t[0] ? ' on' : '') + '" data-act="libtab" data-id="' + t[0] + '">' + t[1] + '</button>';
-  }).join('') + '</div>';
-
-  if (state.libTab === 'playlists'){
-    html += '<div class="rows">' + (state.playlists.length
-      ? state.playlists.map(function(pl){
-          return '<div class="row" data-act="openplaylist" data-id="' + pl.id + '">' +
-            '<div class="art" style="' + plArt(pl) + '"></div>' +
-            '<div class="meta"><div class="t">' + esc(pl.name) + '</div>' +
-            '<div class="s">Playlist · ' + pl.tracks.length + ' song' + (pl.tracks.length === 1 ? '' : 's') + '</div></div>' +
-            '<div class="tail"></div></div>';
-        }).join('')
-      : '<div class="empty"><div class="big">No playlists yet</div><p>Tap “Playlist” above, then add songs from the ••• menu.</p></div>') + '</div>';
-  } else if (state.libTab === 'albums'){
-    html += state.albums.length
-      ? '<div class="cardgrid">' + state.albums.map(function(a){
-          return '<button class="card" data-act="openalbum" data-id="' + a.id + '">' +
-            '<div class="art" style="' + artStyle(a) + '"></div>' +
-            '<div class="t">' + esc(a.title) + '</div><div class="s">' + esc(a.artist || 'Album') + '</div></button>';
-        }).join('') + '</div>'
-      : '<div class="empty"><div class="big">No saved albums</div><p>Search the Albums tab and tap Save, or save a playlist as an album.</p></div>';
-  } else if (state.libTab === 'liked'){
-    var liked = state.liked.map(function(l){ return TRACK_MAP[l.id]; }).filter(Boolean);
-    html += '<div class="rows">' + (liked.length ? liked.map(trackRow).join('')
-      : '<div class="empty"><div class="big">No liked songs</div><p>Tap the heart on any track.</p></div>') + '</div>';
-  } else {
-    html += '<div class="rows">' + (state.downloads.length
-      ? state.downloads.map(function(d){
-          var t = TRACK_MAP[d.id] || { id:d.id, title:d.title, artist:d.artist, thumb:d.thumb, dur:0 };
-          return '<div class="row" data-act="play" data-id="' + t.id + '">' +
-            '<div class="art" style="' + artStyle(t) + '"></div>' +
-            '<div class="meta"><div class="t">' + esc(t.title) + '</div>' +
-            '<div class="s">' + esc(t.artist) + ' · ' + (d.kind === 'audio' ? 'offline audio · ' + d.kbps + ' kbps' : 'library save · needs network') +
-            ' · ' + fmtMB(d.bytes) + '</div></div>' +
-            '<div class="tail"><button class="iconbtn" style="width:30px;height:30px" data-act="menu" data-id="' + t.id + '">' + ICONS.dots + '</button></div></div>';
-        }).join('')
-      : '<div class="empty"><div class="big">No downloads</div><p>Use ••• → Download on any song. Offline audio when an instance can serve it, otherwise a library save.</p></div>') + '</div>';
-    if (state.downloads.length){
-      var audioCount = state.downloads.filter(function(d){ return d.kind === 'audio'; }).length;
-      html += '<div class="note">Using <b>' + fmtMB(downloadedBytes()) + '</b> of your <b>' + state.settings.capMB + ' MB</b> cap · ' +
-        audioCount + ' offline audio file' + (audioCount === 1 ? '' : 's') + '.</div>';
-    }
-  }
-  html += '</div>';
-  return html;
-}
-
-function viewPlaylist(){
-  var pl = state.activePlaylist;
-  if (!pl) return viewLibrary();
-  var ts = pl.tracks.map(function(id){ return TRACK_MAP[id]; }).filter(Boolean);
-  var total = ts.reduce(function(s,t){ return s + (t.dur || 0); }, 0);
-  var html = '<div class="viewfade">';
-  html += '<div class="hero" style="background:linear-gradient(180deg,rgba(224,166,63,.18),rgba(0,0,0,0))">' +
-    '<div style="display:flex;gap:16px;align-items:flex-end">' +
-    '<div class="art" style="width:120px;height:120px;flex:0 0 auto;box-shadow:0 14px 30px rgba(0,0,0,.5);' + plArt(pl) + '"></div>' +
-    '<div style="min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.1em;color:#f0d091">PLAYLIST</div>' +
-    '<div style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1.15">' + esc(pl.name) + '</div>' +
-    '<div style="font-size:12px;color:var(--muted);margin-top:8px">' + ts.length + ' songs · ' + Math.round(total/60) + ' min</div></div></div>' +
-    '<div style="display:flex;align-items:center;gap:14px;margin-top:18px;flex-wrap:wrap">' +
-    '<button data-act="playlist-play" data-id="' + pl.id + '" style="width:52px;height:52px;background:linear-gradient(180deg,#f0bc58,#c98a2c);color:#241503;display:grid;place-items:center;box-shadow:inset 0 1px 0 rgba(255,240,200,.55),0 3px 0 rgba(0,0,0,.4);border:1px solid #7a4e16">' + ICONS.play + '</button>' +
-    '<button class="chip" data-act="playlist-to-album" data-id="' + pl.id + '">Save as album</button>' +
-    '<button data-act="playlist-rename" data-id="' + pl.id + '" class="iconbtn" aria-label="Rename">' + ICONS.edit + '</button>' +
-    '<button data-act="playlist-image" data-id="' + pl.id + '" class="iconbtn" aria-label="Change image">' + (pl.image ? ICONS.photo : ICONS.photoPlus) + '</button>' +
-    (pl.image ? '<button data-act="playlist-image-clear" data-id="' + pl.id + '" class="iconbtn" aria-label="Clear image">' + ICONS.x + '</button>' : '') +
-    '<button data-act="playlist-delete" data-id="' + pl.id + '" class="iconbtn">' + ICONS.trash + '</button>' +
-    '</div></div>';
-  html += '<div class="rows">' + (ts.length ? ts.map(trackRow).join('')
-    : '<div class="empty"><div class="big">Empty playlist</div><p>Add songs from the ••• menu in search results.</p></div>') + '</div>';
+  html += '<div class="libhead"><span class="lib-title" style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--muted2)">RECENTLY PLAYED</span>' +
+    (state.recent.length ? '<button class="addbtn" data-act="clear-history">' + ICONS.trash + 'Clear</button>' : '') + '</div>';
+  html += '<div class="rows">' + (recents.length ? recents.map(trackRow).join('')
+    : '<div class="empty"><div class="big">Nothing yet</div><p>Tracks you play will show up here, on this device only.</p></div>') + '</div>';
   html += '</div>';
   return html;
 }
 
 function viewAlbum(){
   var a = state.activeAlbumObj;
-  if (!a) return viewLibrary();
-  var saved = state.albums.some(function(x){ return x.id === a.id; });
+  if (!a) return viewRecent();
   var ts = (a.items || []).map(function(x){ return typeof x === 'string' ? TRACK_MAP[x] : x; }).filter(Boolean);
   var html = '<div class="viewfade">';
   html += '<div class="hero" style="background:linear-gradient(180deg,rgba(43,88,118,.55),rgba(0,0,0,.1))">' +
@@ -2380,7 +1698,7 @@ function viewAlbum(){
     '<div style="font-size:12px;color:rgba(255,255,255,.8);margin-top:8px">' + esc(a.artist || '') + (ts.length ? ' · ' + ts.length + ' songs' : '') + '</div></div></div>' +
     '<div style="display:flex;align-items:center;gap:14px;margin-top:18px">' +
     (ts.length ? '<button data-act="album-play" data-id="' + a.id + '" style="width:52px;height:52px;background:linear-gradient(180deg,#f0bc58,#c98a2c);color:#241503;display:grid;place-items:center;box-shadow:inset 0 1px 0 rgba(255,240,200,.55),0 3px 0 rgba(0,0,0,.4);border:1px solid #7a4e16">' + ICONS.play + '</button>' : '') +
-    '<button class="chip' + (saved ? ' on' : '') + '" data-act="album-save" data-id="' + a.id + '">' + (saved ? 'Saved' : 'Save album') + '</button>' +
+    '<a class="chip" style="text-decoration:none;color:inherit" target="_blank" rel="noopener" href="https://music.youtube.com/playlist?list=' + encodeURIComponent(a.id) + '">Open on YouTube Music ↗</a>' +
     '</div></div>';
 
   if (!ts.length){
@@ -2398,70 +1716,24 @@ function viewAlbum(){
 
 function viewSettings(){
   var st = state.settings;
-  function seg(key, opts, cur, extra){
+  function seg(key, opts, cur){
     return '<div class="seg">' + opts.map(function(o){
       return '<button class="' + (String(cur) === String(o[0]) ? 'on' : '') + '" data-act="set" data-key="' + key +
-        '" data-val="' + o[0] + '"' + (extra || '') + '>' + o[1] + '</button>';
+        '" data-val="' + o[0] + '">' + o[1] + '</button>';
     }).join('') + '</div>';
   }
-  var used = downloadedBytes();
-  var pct = Math.min(100, (used / (st.capMB * 1048576)) * 100);
-  var audioCount = state.downloads.filter(function(d){ return d.kind === 'audio'; }).length;
-
   var html = '<div class="viewfade">';
   html += installHintHTML();
 
-  html += '<div class="setsec"><h3>Search backend</h3><div class="card-box">' +
+  html += '<div class="setsec"><h3>Search</h3><div class="card-box">' +
     '<div class="setrow"><div><div class="lbl">Status</div>' +
     '<div class="sub">' + (state.net === 'online'
-      ? 'Connected to <b style="color:#cfeedc">' + esc((Backend.working || '').replace(/^https?:\/\//,'')) + '</b>'
+      ? 'Connected to <b style="color:#cfeedc">' + esc(hostLabel(Backend.working || '')) + '</b>'
       : state.net === 'down' ? 'No instance reachable right now' : 'Checking…') + '</div></div>' +
     '<button class="chip" data-act="retry-net">Test</button></div>' +
     '<div class="inputrow"><label for="instInput">Custom instance (optional)</label>' +
     '<input id="instInput" type="url" inputmode="url" spellcheck="false" placeholder="https://invidious.example.com" value="' + esc(st.instance) + '">' +
-    '<div class="hint">Sonora tries public Invidious instances in order. Paste your own if you have one — no account needed.</div></div>' +
-    '</div></div>';
-
-  html += '<div class="setsec"><h3>Playback engine</h3><div class="card-box">' +
-    '<div class="setrow col"><div><div class="lbl">How tracks play</div>' +
-    '<div class="sub">Auto tries a real audio stream first (downloadable, works offline) and falls back to the official player when none can be resolved. Measured on 2026-11-22: public instances resolved audio for roughly 1 in 10 sampled tracks, so expect the fallback often.</div></div>' +
-    seg('engine', [['auto','Auto'],['direct','Direct only'],['official','Official only']], st.engine) + '</div>' +
-    '<div class="setrow"><div><div class="lbl">Last engine used</div>' +
-    '<div class="sub">' + (state.audioSource
-      ? (state.audioSource.name === 'official'
-          ? '<b style="color:#ffd79a">Official player</b><br><span style="color:var(--muted2)">no direct stream — ' + esc(state.lastResolveError || 'unavailable') + '</span>'
-          : '<b style="color:#cfeedc">' + PROVIDER_LABEL[state.audioSource.name] + '</b> · ' + esc(hostLabel(state.audioSource.host)) + '<br><span style="color:var(--muted2)">resolved ' + ago(state.audioSource.at) + ' · ' + (state.audioSource.bitrate || '—') + ' kbps</span>')
-      : 'Not resolved yet — resolves on first play.') + '</div></div></div>' +
-    '</div></div>';
-
-  html += '<div class="setsec"><h3>Stream backend</h3><div class="card-box">' +
-    '<div class="setrow"><div><div class="lbl">Provider</div>' +
-    '<div class="sub">' + (state.audioSource
-      ? '<b style="color:#cfeedc">' + PROVIDER_LABEL[state.audioSource.name] + '</b> · ' + (state.audioSource.host ? esc(hostLabel(state.audioSource.host)) : 'no host') + '<br><span style="color:var(--muted2)">resolved ' + ago(state.audioSource.at) + ' · ' + (state.audioSource.bitrate || '—') + ' kbps</span>'
-      : 'Not resolved yet — resolves on first play.') + '</div></div>' +
-    '<button class="chip" data-act="audio-test">Test now</button></div>' +
-    '<div class="inputrow"><div class="hint">Invidious → Cobalt — the first validated source wins. ' +
-    'Instance lists refresh live from the providers’ own directories, so stale instances never stall a track. ' +
-    'Search and audio resolution share the Invidious chain; Cobalt is the last resort. These public services see your track IDs and titles.</div></div>' +
-    '</div></div>';
-
-  html += '<div class="setsec"><h3>Download behaviour</h3><div class="card-box">' +
-    '<div class="setrow col"><div><div class="lbl">What “Download” does</div>' +
-    '<div class="sub">“Download audio file” in the track menu saves the real bytes to your device — mp3 from Cobalt, whatever Invidious serves. “Download” stores an offline copy on this device and falls back to a library save if the stream is unavailable.</div></div>' +
-    seg('downloadMode', [['audio','Offline audio'],['library','Library save']], st.downloadMode) + '</div>' +
-    '<div class="setrow col"><div><div class="lbl">Audio bitrate</div>' +
-    '<div class="sub">Applied exactly when a real audio stream is available.</div></div>' +
-    seg('downloadQuality', [['saver','48k'],['normal','128k'],['high','256k']], st.downloadQuality) + '</div>' +
-    '<div class="setrow col"><div><div class="lbl">Storage cap</div>' +
-    '<div class="meter"><i style="width:' + pct + '%"></i></div>' +
-    '<div class="kv"><span>' + fmtMB(used) + ' · ' + state.downloads.length + ' item(s), ' + audioCount + ' offline</span><span>cap ' + st.capMB + ' MB</span></div></div>' +
-    seg('capMB', [['256','256'],['512','512'],['1024','1 GB'],['2048','2 GB']], st.capMB) + '</div>' +
-    '</div></div>';
-
-  html += '<div class="setsec"><h3>Streaming quality</h3><div class="card-box">' +
-    '<div class="setrow col"><div><div class="lbl">Stream over</div>' +
-    '<div class="sub">Picks the best audio stream the instance offers at or below this bitrate.</div></div>' +
-    seg('streamQuality', [['saver','Saver'],['normal','Normal'],['high','High'],['auto','Auto']], st.streamQuality) + '</div>' +
+    '<div class="hint">Sonora sends searches to public Invidious instances in order. Playback itself never touches this chain — it only plays videos in the official YouTube player.</div></div>' +
     '</div></div>';
 
   html += '<div class="setsec"><h3>Music videos</h3><div class="card-box">' +
@@ -2473,45 +1745,23 @@ function viewSettings(){
     '<button class="chip" data-act="hidden-info">' + state.hidden.length + ' hidden</button></div>' +
     '</div></div>';
 
-  html += '<div class="setsec"><h3>Backup & sync</h3><div class="card-box">' +
-    '<div class="setrow"><div><div class="lbl">Export playlists</div>' +
-    '<div class="sub">Save every playlist to a local sonora-playlists.json file.</div></div>' +
-    '<button class="chip" data-act="export-playlists">' + ICONS.export + ' Export</button></div>' +
-    '<div class="setrow"><div><div class="lbl">Import playlists</div>' +
-    '<div class="sub">Upload a .json or .txt file — playlists are matched to songs by search.</div></div>' +
-    '<label class="chip" style="cursor:pointer"><input type="file" id="importInput" accept=".json,.txt,application/json,text/plain" hidden>' +
-    ICONS.cloudDown + ' Import</label></div>' +
-    '</div></div>';
-
-  html += '<div class="setsec"><h3>Google Drive sync</h3><div class="card-box">' +
-    '<div class="inputrow"><label for="gdrvClientId">Google Client ID (optional)</label>' +
-    '<input id="gdrvClientId" type="text" spellcheck="false" placeholder="…apps.googleusercontent.com" value="' + esc(gdrive.clientId) + '">' +
-    '<div class="hint">Your personal, local-only identifier. Google Cloud Console → APIs &amp; Services → Credentials → OAuth client ID (Web application). ' +
-    'Add your origin (this site) to Authorized JavaScript origins. The secret is never needed and nothing is stored except this ID in this device’s localStorage.</div></div>' +
-    '<div class="setrow"><div><div class="lbl">Status</div>' +
-    '<div class="sub">' + (gdrive.token ? 'Signed in with Google Drive' : gdriveConfigured() ? 'Client ID saved — not sign-in required yet' : 'Not configured — skip to use local-only sync') + '</div></div>' +
-    '<button class="chip" data-act="gdrive-sign-in">' + ICONS.cloudUp + ' Sign in</button></div>' +
-    '<div class="setrow"><div><div class="lbl">Push playlists</div>' +
-    '<div class="sub">Upload sonora-playlists.json to your Drive.</div></div>' +
-    '<button class="chip" data-act="gdrive-push">' + ICONS.cloudUp + ' Push</button></div>' +
-    '<div class="setrow"><div><div class="lbl">Restore playlists</div>' +
-    '<div class="sub">Replace local playlists with the file on Drive.</div></div>' +
-    '<button class="chip" data-act="gdrive-pull">' + ICONS.cloudDown + ' Pull</button></div>' +
-    (gdrive.token ? '<div class="setrow"><div><div class="lbl">Connected</div>' +
-      '<div class="sub">Signed in · last sync ' + (gdrive.lastSync ? new Date(gdrive.lastSync).toLocaleString() : '—') + '</div></div>' +
-      '<button class="chip danger" data-act="gdrive-sign-out">Sign out</button></div>' : '') +
-    '</div></div>';
+  html += '<div class="setsec"><h3>Playback</h3><div class="card-box">' +
+    '<div class="setrow"><div><div class="lbl">Player</div>' +
+    '<div class="sub">Official YouTube player — the only engine. Songs play inside YouTube’s own embedded player; nothing else is used.</div></div>' +
+    '<span style="font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--accent)">YOUTUBE</span></div></div></div>';
 
   html += '<div class="setsec"><h3>App</h3><div class="card-box">' +
     '<div class="setrow"><div><div class="lbl">Installed as app</div>' +
     '<div class="sub">' + (standalone ? 'Running standalone — no browser UI.' : 'Safari → Share → Add to Home Screen.') + '</div></div>' +
     '<span style="font-size:11px;font-weight:800;letter-spacing:.06em;color:' + (standalone ? 'var(--accent)' : 'var(--muted)') + '">' + (standalone ? 'YES' : 'NO') + '</span></div>' +
-    '<div class="setrow"><div><div class="lbl">Storage</div>' +
-    '<div class="sub">' + (db ? 'IndexedDB · persistent on this device' : 'In-memory fallback — this context blocks IndexedDB') + '</div></div></div>' +
-    '<div class="setrow"><div><div class="lbl">Clear local data</div>' +
-    '<div class="sub">Playlists, albums, likes and downloads on this device.</div></div>' +
-    '<button class="chip danger" data-act="clear-data">Clear</button></div>' +
+    '<div class="setrow"><div><div class="lbl">Recently played</div>' +
+    '<div class="sub">' + state.recent.length + ' track(s) stored on this device.</div></div>' +
+    '<button class="chip" data-act="clear-history">Clear</button></div>' +
     '</div></div>';
+
+  html += '<div class="setsec"><h3>About</h3><div class="card-box"><div class="hint" style="line-height:1.6">' +
+    'Sonora — a single-file YouTube Music client. Search uses public Invidious instances; playback uses the official YouTube player. No account, no ads, no tracking, nothing else. ' +
+    '<span style="color:var(--muted2)">Lyrics, when opened, are fetched from public lyrics services for the current track.</span></div></div></div>';
 
   html += '<div class="note" style="margin-bottom:26px"><b>If you delete the Home Screen icon</b>, iOS also deletes everything Sonora stored on the device.</div>';
   html += '</div>';
@@ -2522,9 +1772,8 @@ function renderView(){
   if (state.view === 'search'){ renderSearch(); return; }
   var html = '';
   if (state.view === 'home') html = viewHome();
-  else if (state.view === 'library') html = viewLibrary();
+  else if (state.view === 'library') html = viewRecent();
   else if (state.view === 'settings') html = viewSettings();
-  else if (state.view === 'playlist') html = viewPlaylist();
   else if (state.view === 'album') html = viewAlbum();
   var view = $('#view');
   view.innerHTML = html;
@@ -2536,28 +1785,12 @@ function closeSheets(){ $('#asheet').classList.remove('open'); $('#scrim').class
 function openSheet(inner){ var s = $('#asheet'); s.innerHTML = inner; s.classList.add('open'); $('#scrim').classList.add('on'); }
 
 function openTrackMenu(id){
-  var t = TRACK_MAP[id]; if (!t) return;
-  var dl = downloadOf(id);
-  var inPl = !!state.activePlaylist;
-  var html = '<div class="ahead"><b>' + esc(t.title) + '</b>' + esc(t.artist) + (t.source === 'demo' ? ' · demo track' : ' · audio') + '</div>';
-  html += '<button class="aitem" data-act="do-like" data-id="' + id + '">' + (isLiked(id) ? ICONS.heartF : ICONS.heart) + (isLiked(id) ? 'Remove from Liked Songs' : 'Add to Liked Songs') + '</button>';
-  html += '<button class="aitem" data-act="do-download" data-id="' + id + '">' + ICONS.download + (dl ? 'Delete download' : 'Download (offline)') + '</button>';
-  html += '<button class="aitem" data-act="do-download-file" data-id="' + id + '">' + ICONS.download + 'Download audio file</button>';
+  var t = TRACK_MAP[id];
+  if (!t) return;
+  var html = '<div class="ahead"><b>' + esc(t.title) + '</b>' + esc(t.artist) + '</div>';
   html += '<button class="aitem" data-act="play" data-id="' + id + '">' + ICONS.play + 'Play now</button>';
-  if (t.source !== 'demo'){
-    html += '<a class="aitem" style="text-decoration:none;color:inherit" target="_blank" rel="noopener" ' +
-      'href="https://music.youtube.com/watch?v=' + encodeURIComponent(t.id) + '">' + ICONS.share + 'Open in YouTube Music</a>';
-  }
-  if (inPl) html += '<button class="aitem" data-act="remove-from-playlist" data-id="' + id + '">' + ICONS.x + 'Remove from this playlist</button>';
-  html += '<div class="ahead" style="border-bottom:0;border-top:1px solid var(--line);padding-top:10px">Add to playlist</div>';
-  if (!state.playlists.length){
-    html += '<button class="aitem" data-act="newplaylist-for" data-id="' + id + '">' + ICONS.plus + 'Create a playlist</button>';
-  } else {
-    state.playlists.forEach(function(pl){
-      html += '<button class="aitem" data-act="add-to" data-id="' + id + '" data-pl="' + pl.id + '">' + ICONS.plus + esc(pl.name) + '</button>';
-    });
-    html += '<button class="aitem" data-act="newplaylist-for" data-id="' + id + '">' + ICONS.plus + 'New playlist…</button>';
-  }
+  html += '<a class="aitem" style="text-decoration:none;color:inherit" target="_blank" rel="noopener" href="https://music.youtube.com/watch?v=' + encodeURIComponent(t.id) + '">' + ICONS.share + 'Open in YouTube Music</a>';
+  html += '<button class="aitem" data-act="copy-link" data-id="' + id + '">' + ICONS.share + 'Copy YouTube link</button>';
   openSheet(html);
 }
 
@@ -2575,8 +1808,9 @@ function openHiddenInfo(){
   html += '<button class="aitem" data-act="close-sheet" style="justify-content:center;color:var(--accent)">Close</button>';
   openSheet(html);
 }
-
-/* ------------------------------ events ------------------------------ */
+var ICON_192 = 'data:image/png;base64,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';
+var ICON_512 = 'data:image/png;base64,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';
+var ICON_MASK = 'data:image/png;base64,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';/* ------------------------------ events ------------------------------ */
 document.addEventListener('click', function(e){
   if (e.target.closest && e.target.closest('#searchResults')) searchDirty = false;
   var el = e.target.closest('[data-act]');
@@ -2584,114 +1818,61 @@ document.addEventListener('click', function(e){
   var act = el.dataset.act, id = el.dataset.id;
 
   switch(act){
-    case 'settings': state.view = 'settings'; render(); break;
+    case 'settings': state.view = 'settings'; state.tab = 'settings'; render(); break;
     case 'back':
-      if (state.view === 'playlist' || state.view === 'album'){
-        state.activePlaylist = null; state.activeAlbumObj = null;
-        state.view = 'library'; state.tab = 'library';
-      } else { state.view = 'home'; state.tab = 'home'; }
+      if (state.view === 'album'){ state.activeAlbumObj = null; state.view = 'search'; state.tab = 'search'; }
+      else { state.view = 'home'; state.tab = 'home'; }
       render(); break;
     case 'play': {
       var q = null;
-      if (state.activePlaylist) q = state.activePlaylist.tracks.slice();
-      else if (state.view === 'album' && state.activeAlbumObj && state.activeAlbumObj.items)
+      if (state.view === 'album' && state.activeAlbumObj && state.activeAlbumObj.items)
         q = state.activeAlbumObj.items.map(function(x){ return typeof x === 'string' ? x : x.id; });
       playTrack(id, q);
+      closeSheets();
       break;
     }
-    case 'openplaylist': {
-      state.activePlaylist = state.playlists.filter(function(p){ return p.id === id; })[0] || null;
-      if (state.activePlaylist && state.activePlaylist.tracks.length){
-        setGroup('playlist', state.activePlaylist.id, state.activePlaylist.name, '', state.activePlaylist.tracks);
-      }
-      state.view = 'playlist'; render(); break;
-    }
     case 'openalbum': {
-      var sAlb = state.albums.filter(function(a){ return a.id === id; })[0];
       var found = state.albumResults.filter(function(a){ return a.id === id; })[0];
-      state.activeAlbumObj = found || (sAlb ? { id: sAlb.id, title: sAlb.title, artist: sAlb.artist, thumb: sAlb.thumb, items: sAlb.items || [] } : { id: id, title: 'Album', artist: '', items: [] });
-      var albItems = (state.activeAlbumObj.items || []).map(function(x){ return typeof x === 'string' ? { id: x } : x; });
-      if (albItems.length){
-        setGroup('album', id, state.activeAlbumObj.title, state.activeAlbumObj.artist, albItems);
-        rememberAlbum(state.activeAlbumObj, albItems);
-      }
+      state.activeAlbumObj = found || { id: id, title: 'Album', artist: '', items: [] };
       state.view = 'album'; render();
       if (!(state.activeAlbumObj.items || []).length && state.net !== 'down') reloadAlbum(id);
       break;
-    }
-    case 'reload-album': reloadAlbum(id); break;
-    case 'album-save': {
-      var a = state.activeAlbumObj || { id: id, title:'Album', artist:'', items:[] };
-      saveAlbum(a); break;
     }
     case 'album-play': {
       var alb = state.activeAlbumObj;
       if (alb && alb.items && alb.items.length){
         var ids = alb.items.map(function(x){ return typeof x === 'string' ? x : x.id; });
-        setGroup('album', alb.id, alb.title, alb.artist, alb.items);
-        rememberAlbum(alb, alb.items);
         playTrack(ids[0], ids);
       } else toast('No tracks available for this album');
       break;
     }
-    case 'playlist-play': {
-      var pl = state.playlists.filter(function(p){ return p.id === id; })[0];
-      if (pl && pl.tracks.length){
-        setGroup('playlist', pl.id, pl.name, '', pl.tracks);
-        playTrack(pl.tracks[0], pl.tracks.slice());
-      } else toast('This playlist is empty');
+    case 'reload-album': reloadAlbum(id); break;
+    case 'retry-net': case 'retry-search': probeAndRender(); break;
+    case 'hidden-info': openHiddenInfo(); break;
+    case 'close-sheet': closeSheets(); break;
+    case 'copy-link': {
+      var lt = TRACK_MAP[id];
+      var url = 'https://youtu.be/' + encodeURIComponent(lt && lt.id ? lt.id : id);
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(url).then(function(){ toast('Link copied'); }).catch(function(){ toast(url); });
+      } else toast(url);
+      closeSheets();
       break;
     }
-    case 'playlist-to-album': {
-      var p2 = state.playlists.filter(function(p){ return p.id === id; })[0];
-      if (!p2) break;
-      saveAlbum({ id: 'album_' + p2.id, title: p2.name, artist: 'From your playlist', thumb: '', items: p2.tracks.slice(), c: ['#e0a63f','#6e3c14'] });
+    case 'mode': state.searchMode = id; state.results = []; state.albumResults = []; render(); if (state.query.trim()) runSearch(); break;
+    case 'go-search': state.tab = 'search'; state.view = 'search'; render(); setTimeout(function(){ var i = $('#searchInput'); if (i) i.focus(); }, 150); break;
+    case 'clear-history':
+      state.recent = []; LS.set('sonora.recent', []); render(); toast('History cleared');
+      break;
+    case 'set': {
+      var key = el.dataset.key, val = el.dataset.val;
+      state.settings[key] = val;
+      LS.set('sonora.settings', state.settings);
+      if (key === 'strictness') toast(val === 'strict' ? 'Strict — lyric videos dropped too' : 'Balanced — lyric videos allowed');
+      else toast('Saved');
+      render(); if (key === 'strictness' && state.query.trim()) runSearch();
       break;
     }
-    case 'playlist-rename': {
-      var p3 = state.playlists.filter(function(p){ return p.id === id; })[0];
-      var nm = prompt('Rename playlist', p3 ? p3.name : '');
-      if (nm && p3){ p3.name = nm.trim() || p3.name; dbPut('playlists', p3); render(); }
-      break;
-    }
-    case 'playlist-delete': {
-      var p4 = state.playlists.filter(function(p){ return p.id === id; })[0];
-      if (p4 && confirm('Delete playlist “' + p4.name + '”?')){
-        state.playlists = state.playlists.filter(function(p){ return p.id !== id; });
-        dbDel('playlists', id);
-        state.activePlaylist = null; state.view = 'library';
-        render(); toast('Playlist deleted');
-      }
-      break;
-    }
-    case 'newplaylist': {
-      var name = prompt('New playlist name', 'My Playlist #' + (state.playlists.length + 1));
-      if (name !== null){
-        var np = newPlaylist(name.trim() || undefined);
-        state.libTab = 'playlists'; state.view = 'library'; state.tab = 'library';
-        render(); toast('Created “' + np.name + '”');
-      }
-      break;
-    }
-    case 'newplaylist-for': {
-      var nm2 = prompt('New playlist name', 'My Playlist #' + (state.playlists.length + 1));
-      if (nm2 !== null){ var np2 = newPlaylist(nm2.trim() || undefined); addToPlaylist(np2.id, id); closeSheets(); render(); }
-      break;
-    }
-    case 'add-to': addToPlaylist(el.dataset.pl, id); closeSheets(); break;
-    case 'remove-from-playlist':
-      if (state.activePlaylist){
-        state.activePlaylist.tracks = state.activePlaylist.tracks.filter(function(x){ return x !== id; });
-        dbPut('playlists', state.activePlaylist);
-        closeSheets(); render(); toast('Removed from playlist');
-      }
-      break;
-    case 'menu': openTrackMenu(id); break;
-    case 'do-like': toggleLike(id); closeSheets(); break;
-    case 'do-download': if (isDownloaded(id)) removeDownload(id); else downloadTrack(id); closeSheets(); break;
-    case 'do-download-file': downloadAudioFile(id); closeSheets(); break;
-    case 'like-current': { var ct = currentTrack(); if (ct) toggleLike(ct.id); break; }
-    case 'download-current': { var ct2 = currentTrack(); if (ct2){ if (isDownloaded(ct2.id)) removeDownload(ct2.id); else downloadTrack(ct2.id); } break; }
     case 'toggle': togglePlay(); break;
     case 'next': step(1); break;
     case 'prev': step(-1); break;
@@ -2699,57 +1880,7 @@ document.addEventListener('click', function(e){
     case 'repeat': state.repeat = !state.repeat; syncPlayer(); toast(state.repeat ? 'Repeat on' : 'Repeat off'); break;
     case 'open-np': $('#np').classList.add('open'); syncPlayer(); break;
     case 'close-np': $('#np').classList.remove('open'); break;
-    case 'np-menu': { var ct3 = currentTrack(); if (ct3) openTrackMenu(ct3.id); break; }
-    case 'hidden-info': openHiddenInfo(); break;
-    case 'close-sheet': closeSheets(); break;
-    case 'libtab': state.libTab = id; render(); break;
-    case 'mode': state.searchMode = id; state.results = []; state.albumResults = []; render(); if (state.query.trim()) runSearch(); break;
-    case 'go-search': state.tab = 'search'; state.view = 'search'; render(); setTimeout(function(){ var i = $('#searchInput'); if (i) i.focus(); }, 150); break;
-    case 'open-liked': state.libTab = 'liked'; state.view = 'library'; state.tab = 'library'; render(); break;
-    case 'retry-net': case 'retry-search': probeAndRender(); break;
-    case 'set': {
-      var key = el.dataset.key, val = el.dataset.val;
-      state.settings[key] = (key === 'capMB') ? parseInt(val, 10) : val;
-      LS.set('sonora.settings', state.settings);
-      if (key === 'strictness') toast(val === 'strict' ? 'Strict — lyric videos dropped too' : 'Balanced — lyric videos allowed');
-      else if (key === 'downloadMode') toast(val === 'audio' ? 'Downloads try real offline audio first' : 'Downloads save to library only');
-      else if (key === 'downloadQuality') toast('Audio bitrate: ' + KBPS[val] + ' kbps');
-      else if (key === 'capMB') toast('Storage cap: ' + val + ' MB');
-      else if (key === 'engine') toast(val === 'direct' ? 'Direct audio only — playback fails when no stream exists'
-        : val === 'official' ? 'Official player only — always plays, never downloadable'
-        : 'Auto — real stream first, official player as fallback');
-      else toast('Streaming preference: ' + (QUAL_LABEL[val] || val));
-      render(); if (key === 'strictness' && state.query.trim()) runSearch();
-      break;
-    }
-    case 'clear-data':
-      if (confirm('Delete all Sonora data on this device?')){
-        state.playlists.forEach(function(p){ dbDel('playlists', p.id); });
-        state.albums.forEach(function(a){ dbDel('albums', a.id); });
-        state.liked.forEach(function(l){ dbDel('liked', l.id); });
-        state.downloads.forEach(function(d){ dbDel('downloads', d.id); dbDel('blobs', d.id); });
-        state.playlists = []; state.albums = []; state.liked = []; state.downloads = []; state.recent = [];
-        LS.set('sonora.recent', []);
-        render(); toast('Local data cleared');
-      }
-      break;
-    case 'dismiss-install': state.installDismissed = true; LS.set('sonora.installDismissed', true); render(); break;
-    case 'audio-test': {
-      var t3 = currentTrack();
-      if (!t3){ toast('Play something first, then Test now'); break; }
-      var kbps3 = AUDIO_QUAL_KBPS(state.settings.streamQuality === 'auto' ? 'normal' : state.settings.streamQuality);
-      toast('Testing stream…');
-      Backend.resolveAudio(t3.id, kbps3).then(function(got){
-        state.audioSource = { name: got.provider, host: got.host, bitrate: got.bitrate, at: Date.now() };
-        toast('Audio: ' + PROVIDER_LABEL[got.provider] + ' · ' + hostLabel(got.host) + ' · ' + got.bitrate + ' kbps');
-        render();
-      }).catch(function(e){
-        state.audioSource = null;
-        toast('No audio source — ' + fmtResolveError(e));
-        render();
-      });
-      break;
-    }
+    case 'np-menu': { var ct = currentTrack(); if (ct) openTrackMenu(ct.id); break; }
     case 'lyrics-toggle': {
       var curTrack = currentTrack();
       if (!curTrack){ toast('Play something first'); break; }
@@ -2760,29 +1891,8 @@ document.addEventListener('click', function(e){
       syncPlayer();
       break;
     }
-    case 'export-playlists': exportPlaylists(); break;
-    case 'import-playlists': {
-      var inp = document.createElement('input');
-      inp.type = 'file'; inp.accept = '.json,.txt,application/json,text/plain';
-      inp.onchange = function(){ if (inp.files && inp.files[0]) importPlaylistsFromFile(inp.files[0]); };
-      inp.click();
-      break;
-    }
-    case 'gdrive-sign-in': gdriveSignIn(); break;
-    case 'gdrive-push': gdrivePush(); break;
-    case 'gdrive-pull': gdrivePull(); break;
-    case 'gdrive-sign-out': gdriveSignOut(); break;
-    case 'playlist-image': {
-      var pl2 = state.playlists.filter(function(p){ return p.id === id; })[0];
-      if (pl2) handlePlaylistImagePick(pl2);
-      break;
-    }
-    case 'playlist-image-clear': {
-      var pl3 = state.playlists.filter(function(p){ return p.id === id; })[0];
-      if (pl3){ pl3.image = null; dbPut('playlists', pl3); render(); toast('Playlist image cleared'); }
-      break;
-    }
     case 'install-app': if (deferredPrompt){ deferredPrompt.prompt(); deferredPrompt = null; state.canInstall = false; } break;
+    case 'dismiss-install': state.installDismissed = true; LS.set('sonora.installDismissed', true); render(); break;
   }
 });
 
@@ -2812,16 +1922,6 @@ document.addEventListener('change', function(e){
     probeAndRender();
   }
   if (e.target.id === 'npSeek'){ Player.seek(parseFloat(e.target.value)); paintProgress(); }
-  if (e.target.id === 'gdrvClientId'){
-    gdriveSaveClientId(e.target.value);
-    toast(gdriveConfigured() ? 'Google Client ID saved' : 'Google Client ID cleared');
-    render();
-  }
-  if (e.target.id === 'importInput'){
-    var f = e.target.files && e.target.files[0];
-    if (f) importPlaylistsFromFile(f);
-    e.target.value = '';
-  }
 });
 
 $('#mini').addEventListener('click', function(e){
@@ -2829,20 +1929,25 @@ $('#mini').addEventListener('click', function(e){
   $('#np').classList.add('open'); syncPlayer();
 });
 $('#miniToggle').addEventListener('click', function(e){ e.stopPropagation(); togglePlay(); });
+$('#npVideoWrap').addEventListener('click', function(){
+  var t = currentTrack();
+  if (!t) return;
+  state.playing = !state.playing;
+  if (state.playing) Player.resume(); else Player.pause();
+  syncPlayer();
+});
 
 Array.prototype.forEach.call(document.querySelectorAll('#tabbar button'), function(btn){
   btn.addEventListener('click', function(){
     state.tab = btn.dataset.tab;
     state.view = btn.dataset.tab;
-    state.activePlaylist = null; state.activeAlbumObj = null;
+    state.activeAlbumObj = null;
     render();
     $('#view').scrollTop = 0;
   });
 });
 
 /* ------------------------------ search + album loaders ------------------------------ */
-/* A pasted YouTube link/ID always resolves to a playable result, even when
-   every instance is unreachable — the official player needs no backend. */
 function parseYouTubeLink(q){
   var m = String(q || '').trim();
   if (!m || m.length > 200) return '';
@@ -2889,10 +1994,6 @@ async function runSearch(){
     if (seq !== searchSeq) return;
     state.searchError = err && err.message ? err.message : String(err);
     state.net = 'down';
-    if (state.searchMode === 'songs'){
-      var demo = demoSearch(q);
-      if (demo.length){ state.results = demo; state.searchError += ' — showing offline demo results'; }
-    }
   } finally {
     if (seq === searchSeq){
       state.searching = false;
@@ -2901,11 +2002,11 @@ async function runSearch(){
     }
   }
 }
+
 function restoreSearchFocus(){
   if (state.view !== 'search') return;
   var active = document.activeElement;
   if (active && active.id === 'searchInput') return;
-  /* user interacted with result content — respect it */
   if (active && active.closest && active.closest('#searchResults')) return;
   if (active && active.closest && active.closest('#asheet')) return;
   if (active && active.closest && active.closest('#np')) return;
@@ -2915,6 +2016,7 @@ function restoreSearchFocus(){
     try { inp.setSelectionRange(state.query.length, state.query.length); } catch(e){}
   }
 }
+
 async function reloadAlbum(id){
   toast('Loading album…');
   try {
@@ -2930,245 +2032,28 @@ async function reloadAlbum(id){
     loadAlbumArtistSongs(id);
   }
 }
+
 async function probeAndRender(){
   if (state.net !== 'online') toast('Checking instances…');
   await Backend.probe();
   render();
-  if (state.net === 'online') toast('Connected to ' + (Backend.working || '').replace(/^https?:\/\//,''));
+  if (state.net === 'online') toast('Connected to ' + hostLabel(Backend.working || ''));
   else toast('No instance reachable — try again shortly');
 }
 
 /* =====================================================================
-   Smart shuffle + infinite autoplay
-   Enabled when shuffle is on and repeat is off:
-     1. finish the album/playlist the song is in (front-to-back)
-     2. next album from the same artist (discography, best-effort)
-     3. other albums from the same artist (songs fallback)
-     4. the last user-selected album's remainder
-     5. any known album's unplayed remainder
-     6. a random queue track
-   The public Invidious API exposes no release dates, so “chronological
-   release” is approximated by result order — this is a best-effort
-   approximation, not a strict chronology.
-   ===================================================================== */
-var autoNow = false;
-var autoAlbumSeen = {};     // albumId -> true (auto-visited this session)
-var autoTrackSeen = {};     // trackId -> true (session-lifetime set)
-var albumCache = {};        // albumId -> {id, title, artist, items:[{id,title,artist,thumb,dur}], at}
-var albumContext = null;     // {id, title, artist, ids:[...] } — playback group in progress
-var featuredAlbumId = null; // the album of the last user-selected song
-
-function groupIds(){
-  if (albumContext) return albumContext.ids;
-  return state.queue.slice();
-}
-function markTrack(id){
-  autoTrackSeen[id] = true;
-}
-function clearAutoDone(){
-  autoTrackSeen = {};
-  autoAlbumSeen = {};
-}
-function setGroup(kind, id, title, artist, items){
-  var ids = (items || []).map(function(x){ return typeof x === 'string' ? x : x.id; }).filter(Boolean);
-  albumContext = { kind: kind, id: id, title: title || '', artist: artist || '', ids: ids };
-  ids.forEach(function(tid){ if (TRACK_MAP[tid]) TRACK_MAP[tid].albumId = (kind === 'album') ? id : null; });
-}
-function rememberAlbum(alb, items){
-  if (!alb || !alb.id) return;
-  var list = (items || []).map(function(x){ return typeof x === 'string' ? { id: x } : x; }).filter(function(x){ return x && x.id; });
-  albumCache[alb.id] = { id: alb.id, title: alb.title || 'Album', artist: alb.artist || '', items: list, at: Date.now() };
-  featuredAlbumId = alb.id;
-}
-
-/* --- artist discography (cached search) --- */
-var artistAlbumCache = {};   // artist-lower -> { albums: [...], at }
-var artistSongCache = {};     // artist-lower -> { songs: [...], at }
-var ARTIST_CACHE_TTL = 10 * 60 * 1000;
-
-function cachedArtistAlbums(artist){
-  var key = String(artist || '').toLowerCase();
-  if (!key) return Promise.resolve([]);
-  var hit = artistAlbumCache[key];
-  if (hit && Date.now() - hit.at < ARTIST_CACHE_TTL) return Promise.resolve(hit.albums);
-  return (async function(){
-    try {
-      var res = await Backend.searchAlbums(artist);
-      var seen = {}, out = [];
-      (res.albums || []).forEach(function(a){
-        if (!a || !a.id || seen[a.id]) return;
-        seen[a.id] = true;
-        out.push(a);
-      });
-      artistAlbumCache[key] = { albums: out, at: Date.now() };
-      return out;
-    } catch (e) { return []; }
-  })();
-}
-
-function cachedArtistSongs(artist){
-  var key = String(artist || '').toLowerCase();
-  if (!key) return Promise.resolve([]);
-  var hit = artistSongCache[key];
-  if (hit && Date.now() - hit.at < ARTIST_CACHE_TTL) return Promise.resolve(hit.songs);
-  return (async function(){
-    try {
-      var res = await Backend.searchSongs(artist);
-      var tracks = (res.tracks || []).filter(function(t){
-        return String(t.artist || '').toLowerCase().indexOf(key.split(' ')[0]) >= 0;
-      });
-      if (!tracks.length) tracks = res.tracks || [];
-      artistSongCache[key] = { songs: tracks, at: Date.now() };
-      return tracks;
-    } catch (e) { return []; }
-  })();
-}
-
-function playQueue(ids, startIdx){
-  ids = ids.filter(function(id){ return id; });
-  if (!ids.length) return false;
-  state.queue = ids.slice();
-  state.idx = (typeof startIdx === 'number' && startIdx >= 0 && startIdx < ids.length) ? startIdx : 0;
-  state.progress = 0;
-  state.playing = true;
-  Player.stop();
-  lyricsReset(false);
-  var t = currentTrack();
-  if (t){
-    markTrack(t.id);
-    loadAndPlay(t);
-    setSessionMeta();
-    pushRecent(t.id);
-  }
-  syncPlayer();
-  return true;
-}
-
-async function smartNextTrack(){
-  if (autoNow) return;
-  var cur = currentTrack();
-  if (!cur) return;
-  autoNow = true;
-  try {
-    autoAlbumSeen[cur.albumId || (albumContext && albumContext.id)] = true;
-
-    // 1. finish the album/playlist in playback
-    var group = albumContext;
-    if (group && group.ids.length){
-      var ids = group.ids.slice();
-      var icur = ids.indexOf(cur.id);
-      var remaining = ids.slice(icur + 1).filter(function(id){ return !autoTrackSeen[id]; });
-      if (!remaining.length && ids.length > 1){
-        // all tracks of the group played — skip this album
-        autoAlbumSeen[group.id] = true;
-      }
-      if (remaining.length){
-        playQueue(ids, ids.indexOf(remaining[0]));
-        return;
-      }
-    }
-
-    // 2. next album from the same artist (discography)
-    var artist = (cur.artist || '').trim();
-    if (artist && cur.source !== 'demo'){
-      var albums = await cachedArtistAlbums(artist);
-      for (var i = 0; i < albums.length; i++){
-        var alb = albums[i];
-        if (!alb || !alb.id) continue;
-        if (alb.id === (cur.albumId || (albumContext && albumContext.id))) continue;
-        if (autoAlbumSeen[alb.id]) continue;
-        if (!alb.items || !alb.items.length) continue;
-        autoAlbumSeen[alb.id] = true;
-        setGroup('album', alb.id, alb.title, alb.artist, alb.items);
-        rememberAlbum(alb, alb.items);
-        featuredAlbumId = alb.id;
-        playQueue(albumContext.ids, 0);
-        return;
-      }
-
-      // 3. remaining songs of the artist (discography over → same-artist songs)
-      var songs = await cachedArtistSongs(artist);
-      var remainingSongs = songs.filter(function(t){ return !autoTrackSeen[t.id]; });
-      if (remainingSongs.length){
-        var pick = remainingSongs[Math.floor(Math.random() * remainingSongs.length)];
-        var q = songs.map(function(t){ return t.id; });
-        state.queue = q;
-        var start = q.indexOf(pick.id);
-        playQueue(q, start < 0 ? 0 : start);
-        return;
-      }
-    }
-
-    // 4. last user-selected album's remainder
-    if (featuredAlbumId && albumCache[featuredAlbumId]){
-      var f = albumCache[featuredAlbumId];
-      var rem = f.items.filter(function(x){ return !autoTrackSeen[x.id]; }).map(function(x){ return x.id; });
-      if (rem.length){
-        var ids2 = f.items.map(function(x){ return x.id; });
-        setGroup('album', f.id, f.title, f.artist, f.items);
-        playQueue(ids2, ids2.indexOf(rem[0]));
-        return;
-      }
-    }
-
-    // 5. any known album's remainder
-    var known = Object.keys(albumCache);
-    for (var j = 0; j < known.length; j++){
-      var a2 = albumCache[known[j]];
-      if (autoAlbumSeen[a2.id] && known[j] !== featuredAlbumId) continue;
-      var rem4 = a2.items.filter(function(x){ return !autoTrackSeen[x.id]; }).map(function(x){ return x.id; });
-      if (rem4.length){
-        setGroup('album', a2.id, a2.title, a2.artist, a2.items);
-        playQueue(rem4, 0);
-        return;
-      }
-    }
-
-    // 6. random queue track (legacy behavior)
-    var pick2 = Math.floor(Math.random() * state.queue.length);
-    if (pick2 === state.idx) pick2 = (pick2 + 1) % state.queue.length;
-    state.idx = pick2;
-    state.progress = 0;
-    state.playing = true;
-    Player.stop();
-    var t2 = currentTrack();
-    if (t2){ loadAndPlay(t2); setSessionMeta(); pushRecent(t2.id); }
-    syncPlayer();
-  } finally {
-    autoNow = false;
-  }
-}
-
-/* =====================================================================
-   Language prioritization
-   Detect the user's language from the browser, plus the query script.
-   Results are sorted so same-language songs/albums float to the top.
+   Language prioritization — same-language songs/albums float to the top.
    ===================================================================== */
 var SCRIPTS = [
-  ['devanagari', /[\u0900-\u097F]/],
-  ['bengali-mathiluni', /[\u0980-\u09FF]/],
-  ['gurmukhi', /[\u0A00-\u0A7F]/],
-  ['gujarati', /[\u0A80-\u0AFF]/],
-  ['oriya', /[\u0B00-\u0B7F]/],
-  ['tamil', /[\u0B80-\u0BFF]/],
-  ['kannada', /[\u0C80-\u0CFF]/],
-  ['malayalam', /[\u0D00-\u0D7F]/],
-  ['sinhala', /[\u0D80-\u0DFF]/],
-  ['telugu', /[\u0C00-\u0C7F]/],
-  ['arabic', /[\u0600-\u06FF]/],
-  ['hebrew', /[\u0590-\u05FF]/],
-  ['thai', /[\u0E00-\u0E7F]/],
-  ['lao', /[\u0E80-\u0EFF]/],
-  ['khmer', /[\u1780-\u17FF]/],
-  ['georgian', /[\u10A0-\u10FF]/],
-  ['armenian', /[\u0530-\u058F]/],
-  ['ethiopic', /[\u1200-\u137F]/],
-  ['cjk', /[\u4E00-\u9FFF\u3400-\u4DBF]/],
-  ['hangul', /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/],
-  ['cyrillic', /[\u0400-\u04FF]/],
-  ['greek', /[\u0370-\u03FF]/]
+  ['devanagari', /[\u0900-\u097F]/], ['bengali-mathiluni', /[\u0980-\u09FF]/], ['gurmukhi', /[\u0A00-\u0A7F]/],
+  ['gujarati', /[\u0A80-\u0AFF]/], ['oriya', /[\u0B00-\u0B7F]/], ['tamil', /[\u0B80-\u0BFF]/],
+  ['kannada', /[\u0C80-\u0CFF]/], ['malayalam', /[\u0D00-\u0D7F]/], ['sinhala', /[\u0D80-\u0DFF]/],
+  ['telugu', /[\u0C00-\u0C7F]/], ['arabic', /[\u0600-\u06FF]/], ['hebrew', /[\u0590-\u05FF]/],
+  ['thai', /[\u0E00-\u0E7F]/], ['lao', /[\u0E80-\u0EFF]/], ['khmer', /[\u1780-\u17FF]/],
+  ['georgian', /[\u10A0-\u10FF]/], ['armenian', /[\u0530-\u058F]/], ['ethiopic', /[\u1200-\u137F]/],
+  ['cjk', /[\u4E00-\u9FFF\u3400-\u4DBF]/], ['hangul', /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/],
+  ['cyrillic', /[\u0400-\u04FF]/], ['greek', /[\u0370-\u03FF]/]
 ];
-
 function scriptOf(s){
   var t = String(s || '');
   for (var i = 0; i < SCRIPTS.length; i++){
@@ -3176,7 +2061,6 @@ function scriptOf(s){
   }
   return 'latin';
 }
-
 function browserScript(){
   var lang = String(navigator.language || 'en').toLowerCase().split('-')[0];
   var map = {
@@ -3189,7 +2073,6 @@ function browserScript(){
   };
   return map[lang] || 'latin';
 }
-
 function scoreItem(t, q, script){
   var sc = 0;
   var title = String(t.title || '').toLowerCase();
@@ -3209,7 +2092,6 @@ function scoreItem(t, q, script){
   }
   return sc;
 }
-
 function prioritizeItems(list, q){
   var qScript = scriptOf(q);
   var target = (qScript !== 'latin') ? qScript : browserScript();
@@ -3218,520 +2100,22 @@ function prioritizeItems(list, q){
   return out;
 }
 
-/* =====================================================================
-   Lyrics view (lrclib.net → lyrics.ovh → in-session cache)
-   ===================================================================== */
-var lyrCache = {};         // trackId -> { text, synced: [{time, line}], at }
-var lyrLoading = {};       // trackId -> true
-var lyricsState = { open:false, trackId:null, synced:null, plain:null, curLine:-1, err:false };
-
-function lyricsUrlTypes(){}  // placeholder guard (kept tiny)
-
-function parseSynced(lyrics){
-  var lines = String(lyrics || '').split(/\r?\n/);
-  var out = [];
-  lines.forEach(function(l){
-    var m = l.match(/\[(\d+):(\d+)(?:\.(\d+))?\](.*)/);
-    if (!m) return;
-    var t = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + (m[3] ? parseInt(m[3], 10) / (m[3].length === 3 ? 1000 : 10) : 0);
-    var text = m[4].replace(/<[^>]+>/g, '').trim();
-    if (text) out.push({ time: t, line: text });
-  });
-  return out;
-}
-
-function lyricsFor(trackId){
-  var t = TRACK_MAP[trackId];
-  if (!t) return Promise.resolve(null);
-  var hit = lyrCache[trackId];
-  if (hit && Date.now() - hit.at < 60 * 60 * 1000) return Promise.resolve(hit);
-  var key = t.id;
-  return (async function(){
-    var text = null, synced = null;
-    try {
-      var url = 'https://lrclib.net/api/get?track_name=' + encodeURIComponent(t.title) + '&artist_name=' + encodeURIComponent(t.artist || '');
-      var res = await fetch(url, { cache:'no-store', signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
-      if (res.ok){
-        var d = await res.json();
-        if (d && d.plainLyrics) text = d.plainLyrics;
-        if (d && d.syncedLyrics) synced = parseSynced(d.syncedLyrics);
-      }
-    } catch (e) {}
-    if (!text){
-      try {
-        var url2 = 'https://api.lyrics.ovh/v1/' + encodeURIComponent(t.artist || '') + '/' + encodeURIComponent(t.title);
-        var res2 = await fetch(url2, { cache:'no-store', signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
-        if (res2.ok){
-          var d2 = await res2.json();
-          if (d2 && d2.lyrics) text = d2.lyrics;
-        }
-      } catch (e) {}
-    }
-    if (!text) return null;
-    var entry = { text: text, synced: synced, at: Date.now() };
-    lyrCache[key] = entry;
-    return entry;
-  })();
-}
-
-function renderLyrics(t){
-  var wrap = $('#npLyricsWrap');
-  var bodyEl = $('#npLyricsBody');
-  if (!wrap || !bodyEl) return;
-  if (lyricsState.open){ wrap.hidden = false; }
-  if (!lyricsState.open){ wrap.hidden = true; return; }
-  bodyEl.innerHTML = '<div class="lyrics-status">Fetching lyrics…</div>';
-  lyricsFor(t.id).then(function(entry){
-    if (!lyricsState.open) return;
-    if (!entry){
-      bodyEl.innerHTML = '<div class="lyrics-status">Lyrics unavailable for this track.</div>';
-      return;
-    }
-    if (entry.synced && entry.synced.length){
-      bodyEl.innerHTML = entry.synced.map(function(x, i){ return '<div class="lyrics-line" data-i="' + i + '">' + esc(x.line) + '</div>'; }).join('');
-    } else {
-      bodyEl.innerHTML = '<div class="lyrics-plain">' + esc(entry.text).replace(/\n/g, '<br>') + '</div>';
-    }
-    lyricsState.synced = entry.synced; lyricsState.plain = entry.text;
-    lyricsTick();
-  }).catch(function(){
-    if (!lyricsState.open) return;
-    bodyEl.innerHTML = '<div class="lyrics-status">Lyrics unavailable for this track.</div>';
-  });
-}
-
-function lyricsTick(){
-  var wrap = $('#npLyricsWrap');
-  var bodyEl = $('#npLyricsBody');
-  if (!wrap || wrap.hidden) return;
-  if (!lyricsState.synced || !lyricsState.synced.length) return;
-  var t = currentTrack();
-  if (!t) return;
-  var pos = state.progress || 0;
-  var idx = -1;
-  for (var i = 0; i < lyricsState.synced.length; i++){
-    if (pos >= lyricsState.synced[i].time) idx = i;
-  }
-  if (idx === lyricsState.curLine) return;
-  lyricsState.curLine = idx;
-  var lines = bodyEl.querySelectorAll('.lyrics-line');
-  lines.forEach(function(el){ el.classList.toggle('cur', Number(el.dataset.i) === idx); });
-  var active = bodyEl.querySelector('.lyrics-line.cur');
-  if (active){
-    var target = active.offsetTop - (bodyEl.clientHeight / 2) + (active.clientHeight / 2);
-    bodyEl.scrollTop = Math.max(0, target);
-  }
-}
-
-/* =====================================================================
-   Custom playlist images (drawn to canvas, stored as WebP data URIs)
-   ===================================================================== */
-function playlistImage(pl){
-  return (pl && pl.image) || null;
-}
-
-function setPlaylistImage(pl, dataUrl){
-  pl.image = dataUrl || null;
-  dbPut('playlists', pl);
-}
-
-function handlePlaylistImagePick(pl){
-  if (!pl) return;
-  var input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.onchange = function(){
-    var file = input.files && input.files[0];
-    if (!file) return;
-    if (file.size > 8 * 1048576){ toast('Image too large — use under 8 MB'); return; }
-    var reader = new FileReader();
-    reader.onload = function(){
-      var img = new Image();
-      img.onload = function(){
-        try {
-          var max = 512, w = img.width, h = img.height;
-          if (w > max || h > max){
-            if (w >= h){ h = Math.round(h * max / w); w = max; }
-            else { w = Math.round(w * max / h); h = max; }
-          }
-          var canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          var ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, w, h);
-          var url = canvas.toDataURL('image/webp', 0.82);
-          if (!url.indexOf('data:image/webp') === 0) url = canvas.toDataURL('image/jpeg', 0.85);
-          setPlaylistImage(pl, url);
-          toast('Playlist image updated');
-          render();
-        } catch (e) {
-          toast('Could not process the image');
-        }
-      };
-      img.onerror = function(){ toast('Could not read the image'); };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  input.click();
-}
-
-/* =====================================================================
-   Playlist export / import / Google Drive sync
-   Export: one JSON file with playlists + tracks, downloaded locally.
-   Import: reads a file (JSON array/object or title/artist list) and
-   searches + adds tracks into a new playlist.
-   Drive sync (optional, user-provided Client ID — stored locally only,
-   never committed): upload or restore a sonora-playlists.json file.
-   ===================================================================== */
-function buildPlaylistExport(){
-  var ids = state.playlists.map(function(pl){
-    return {
-      id: pl.id, name: pl.name, createdAt: pl.createdAt || null,
-      tracks: (pl.tracks || []).map(function(tid){
-        var t = TRACK_MAP[tid];
-        return { id: tid, title: t ? t.title : null, artist: t ? t.artist : null };
-      })
-    };
-  });
-  return { version: 1, app: 'sonora', exportedAt: new Date().toISOString(), playlists: ids };
-}
-
-function exportPlaylists(){
-  var payload = buildPlaylistExport();
-  if (!payload.playlists.length){ toast('No playlists to export yet'); return; }
-  var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'sonora-playlists.json';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
-  toast('Exported ' + payload.playlists.length + ' playlist' + (payload.playlists.length === 1 ? '' : 's'));
-}
-
-function importPlaylists(file){
-  return new Promise(function(resolve){
-    var reader = new FileReader();
-    reader.onload = function(){
-      try {
-        resolve(normalizeImported(reader.result));
-      } catch (e) {
-        toast('Could not read that file — use sonora-playlists.json or a Title, Artist list');
-        resolve(null);
-      }
-    };
-    reader.onerror = function(){ toast('Could not read that file'); resolve(null); };
-    reader.readAsText(file);
-  });
-}
-
-function normalizeImported(raw){
-  raw = String(raw || '').trim();
-  var obj;
-  try { obj = JSON.parse(raw); } catch (e) {
-    var lines = raw.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean).filter(function(l){ return l[0] !== '#'; });
-    var items = lines.map(function(l){
-      var m = l.match(/^([^——-]+?)\s*[-—–/]\s*(.+)$/);
-      if (m) return { title: m[1].trim(), artist: m[2].trim() };
-      var i = l.indexOf(' - ');
-      if (i > 0) return { title: l.slice(0, i).trim(), artist: l.slice(i + 3).trim() };
-      return { title: l, artist: '' };
-    });
-    return { playlists: [{ name: 'Imported', items: items }] };
-  }
-  if (Array.isArray(obj)) obj = { playlists: obj };
-  if (obj && Array.isArray(obj.playlists)){
-    return obj;  // sonora format — reuse as-is
-  }
-  if (obj && obj.items && Array.isArray(obj.items)){
-    return { playlists: [{ name: obj.name || 'Imported', items: obj.items }] };
-  }
-  if (obj && Array.isArray(obj)){ /* handled above */ }
-  if (obj && obj.name && Array.isArray(obj.tracks)){
-    return { playlists: [{ name: obj.name, items: obj.tracks }] };
-  }
-  /* Spotify/YT export-ish shapes */
-  var items = [];
-  Object.keys(obj || {}).forEach(function(k){
-    var v = obj[k];
-    if (Array.isArray(v)) items = items.concat(v);
-    else if (v && (v.title || v.name)) items.push({ title: v.title || v.name, artist: v.artist || v.artists || (Array.isArray(v.artists) ? v.artists.join(', ') : '') });
-  });
-  if (!items.length && obj && (obj.title || obj.name)) items = [{ title: obj.title || obj.name, artist: obj.artist || '' }];
-  if (!items.length) return null;
-  return { playlists: [{ name: obj.name || 'Imported', items: items }] };
-}
-
-var importing = false;
-
-async function importPlaylist(file){
-  if (importing) return;
-  importing = true;
-  try {
-    var payload = await importPlaylists(file);
-    if (!payload || !payload.playlists || !payload.playlists.length) return;
-    var playlists = [];
-    /* if a sonora-exported file, honor playlists directly */
-    if (payload.playlists[0] && payload.playlists[0].tracks){
-      payload.playlists.forEach(function(p){
-        playlists.push({ name: p.name || 'Imported Playlist', tracks: p.tracks || [] });
-      });
-    } else {
-      payload.playlists.forEach(function(p){
-        playlists.push({ name: p.name || 'Imported Playlist', items: p.items || [] });
-      });
-    }
-    var totalTracks = playlists.reduce(function(n, p){ return n + (p.tracks ? p.tracks.length : (p.items ? p.items.length : 0)); }, 0);
-    if (!totalTracks){ toast('Nothing to import'); return; }
-    var created = 0, added = 0, skipped = 0;
-    toast('Importing ' + totalTracks + ' track' + (totalTracks === 1 ? '' : 's') + '…');
-    for (var i = 0; i < playlists.length; i++){
-      var p = playlists[i];
-      var entries = p.tracks || p.items || [];
-      var pl = newPlaylist(p.name || 'Imported Playlist');
-      created++;
-      var had = false;
-      for (var j = 0; j < entries.length; j++){
-        var entry = entries[j];
-        var title = entry.title || entry.name || '';
-        var artist = entry.artist || entry.artists || '';
-        if (!title){ skipped++; continue; }
-        try {
-          /* re-register known tracks from sonora exports (no network needed) */
-          if (typeof entry === 'object' && entry.id && TRACK_MAP[entry.id]){
-            pl.tracks.push(entry.id); added++; had = true; continue;
-          }
-          var res = await Backend.searchSongs(artist ? (artist + ' ' + title).trim() : title);
-          var best = res.tracks && res.tracks[0];
-          if (best){ pl.tracks.push(best.id); added++; had = true; }
-          else skipped++;
-        } catch (e) { skipped++; }
-        await new Promise(function(r){ setTimeout(r, 220); });
-      }
-      if (had) dbPut('playlists', pl);
-      else {
-        /* nothing matched — drop this playlist silently */
-        state.playlists = state.playlists.filter(function(x){ return x.id !== pl.id; });
-        dbDel('playlists', pl.id);
-      }
-    }
-    toast('Imported ' + added + ' song' + (added === 1 ? '' : 's') + (skipped ? ' · ' + skipped + ' not found' : ''));
-    state.tab = 'library'; state.view = 'library'; state.libTab = 'playlists';
-    render();
-  } finally {
-    importing = false;
-  }
-}
-
-function importPlaylistsFromFile(file){
-  if (!file) return;
-  importPlaylist(file);
-}
-
-/* ---------- Google Drive sync — credentials stay on this device ---------- */
-var gdrive = {
-  clientId: '', fileId: '', lastSync: 0, token: null, signIn: false
-};
-
-function gdriveConfigured(){ return !!gdrive.clientId; }
-
-function gdriveLoadClientId(){
-  var saved = null;
-  try { saved = LS.get('sonora.gdrive.clientId', ''); } catch (e) {}
-  if (saved) gdrive.clientId = saved;
-}
-function gdriveSaveClientId(v){
-  gdrive.clientId = String(v || '').trim();
-  try { LS.set('sonora.gdrive.clientId', gdrive.clientId); } catch (e) {}
-}
-
-function gdriveLoadFileId(){
-  try { gdrive.fileId = LS.get('sonora.gdrive.fileId', ''); } catch (e) { gdrive.fileId = ''; }
-}
-function gdriveSaveFileId(v){
-  gdrive.fileId = String(v || '').trim();
-  try { LS.set('sonora.gdrive.fileId', gdrive.fileId); } catch (e) {}
-}
-
-function gdriveSignIn(){
-  if (!gdriveConfigured()){ toast('Add your Google Client ID in Settings first'); return; }
-  var finish = function(){ /* GIS callback */ };
-  if (window.google && google.accounts && google.accounts.oauth2){ return gdrivePopupFlow(); }
-  var s = document.createElement('script');
-  s.src = 'https://accounts.google.com/gsi/client';
-  s.async = true;
-  s.defer = true;
-  s.onload = function(){ gdrivePopupFlow(); };
-  s.onerror = function(){ toast('Google sign-in unavailable — check your connection'); };
-  document.head.appendChild(s);
-}
-
-function gdrivePopupFlow(){
-  try {
-    var client = google.accounts.oauth2.initTokenClient({
-      client_id: gdrive.clientId,
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      callback: function(resp){
-        if (resp && resp.access_token){
-          gdrive.token = resp.access_token;
-          toast('Signed in to Google Drive');
-          state.ready = true;
-          render();
-        } else {
-          toast('Drive sign-in was cancelled');
-        }
-      }
-    });
-    client.requestAccessToken();
-  } catch (e) {
-    toast('Drive sign-in unavailable');
-  }
-}
-
-function gdriveEnsureToken(){
-  if (gdrive.token) return Promise.resolve(gdrive.token);
-  return new Promise(function(resolve){
-    if (window.google && google.accounts && google.accounts.oauth2){
-      try {
-        var client = google.accounts.oauth2.initTokenClient({
-          client_id: gdrive.clientId,
-          scope: 'https://www.googleapis.com/auth/drive.file',
-          callback: function(resp){ resolve(resp && resp.access_token ? resp.access_token : null); }
-        });
-        client.requestAccessToken();
-        return;
-      } catch (e) {}
-    }
-    toast('Drive sign-in unavailable');
-    resolve(null);
-  });
-}
-
-async function gdrivePull(){
-  var token = await gdriveEnsureToken();
-  if (!token) return;
-  try {
-    if (gdrive.fileId){
-      var res = await fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(gdrive.fileId) + '?alt=media', { headers: { 'Authorization': 'Bearer ' + token } });
-      if (res.status === 200){
-        var payload = await res.json();
-        importFromPayload(payload);
-        return;
-      }
-      if (res.status === 404) gdrive.fileId = '';
-    }
-    /* no local record of the file — search for it */
-    var q = encodeURIComponent("name = 'sonora-playlists.json' and trashed = false");
-    var list = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,modifiedTime)', { headers: { 'Authorization': 'Bearer ' + token } });
-    if (!list.ok) throw new Error('HTTP ' + list.status);
-    var data = await list.json();
-    if (!data.files || !data.files.length){ toast('No sonora-playlists.json on Google Drive yet'); return; }
-    gdriveSaveFileId(data.files[0].id);
-    var dl = await fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(data.files[0].id) + '?alt=media', { headers: { 'Authorization': 'Bearer ' + token } });
-    if (!dl.ok) throw new Error('HTTP ' + dl.status);
-    var p2 = await dl.json();
-    importFromPayload(p2);
-  } catch (e) {
-    toast('Could not download from Drive — try exporting locally instead');
-  }
-}
-
-function importFromPayload(payload){
-  if (!payload || !payload.playlists || !payload.playlists.length){ toast('The file has no playlists'); return; }
-  if (!confirm('Replace ' + state.playlists.length + ' local playlist(s) with the ' + payload.playlists.length + ' from Google Drive?')) return;
-  state.playlists = [];
-  payload.playlists.forEach(function(p){
-    var pl = { id: p.id || ('pl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)),
-               name: p.name || 'Imported Playlist',
-               tracks: (p.tracks || []).map(function(t){ return typeof t === 'string' ? t : t.id; }).filter(Boolean),
-               createdAt: p.createdAt || Date.now(),
-               image: p.image || null };
-    /* re-register track objects if known */
-    (p.tracks || []).forEach(function(t){
-      if (typeof t === 'object' && t && t.id){
-        if (!TRACK_MAP[t.id]) TRACK_MAP[t.id] = { id: t.id, title: t.title || 'Unknown track', artist: t.artist || '', thumb: t.thumb || '', dur: 0, source: 'saved' };
-      }
-    });
-    state.playlists.push(pl);
-    dbDel('playlists', pl.id);
-    dbPut('playlists', pl);
-  });
-  state.activePlaylist = null; state.view = 'library'; state.libTab = 'playlists';
-  render();
-  toast('Restored ' + payload.playlists.length + ' playlist' + (payload.playlists.length === 1 ? '' : 's') + ' from Drive');
-}
-
-async function gdrivePush(){
-  var token = await gdriveEnsureToken();
-  if (!token) return;
-  var payload = buildPlaylistExport();
-  payload.updatedAt = new Date().toISOString();
-  var body = JSON.stringify(payload);
-  var metadata = { name: 'sonora-playlists.json', mimeType: 'application/json' };
-  try {
-    if (gdrive.fileId){
-      var res = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(gdrive.fileId) + '?uploadType=media', {
-        method: 'PATCH',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: body
-      });
-      if (res.status === 200){ gdrive.lastSync = Date.now(); toast('Synced to Google Drive'); render(); return; }
-      if (res.status !== 404) throw new Error('HTTP ' + res.status);
-      gdriveSaveFileId('');
-    }
-    var metadataJson = JSON.stringify(metadata);
-    var multipart = 'sonora';
-    var boundary = 'sonora-boundary-' + Math.random().toString(36).slice(2);
-    var multipartBody = [
-      '--' + boundary,
-      'Content-Type: application/json; charset=UTF-8',
-      '',
-      metadataJson,
-      '--' + boundary,
-      'Content-Type: application/json',
-      '',
-      body,
-      '--' + boundary + '--'
-    ].join('\r\n');
-    var create = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'multipart/related; boundary=' + boundary },
-      body: multipartBody
-    });
-    if (!create.ok) throw new Error('HTTP ' + create.status);
-    var created = await create.json();
-    if (created && created.id) gdriveSaveFileId(created.id);
-    gdrive.lastSync = Date.now();
-    toast('Synced to Google Drive');
-    render();
-  } catch (e) {
-    toast('Could not sync to Drive — export locally instead');
-  }
-}
-
-function gdriveSignOut(){
-  gdrive.token = null;
-  toast('Signed out of Google Drive');
-  render();
-}
-
 /* ---------- album fallback: artist songs when the track list is empty ---------- */
 function artistSongsFallback(album){
   if (!album || !album.artist || album.artist === 'Unknown artist') return '';
-  var st = albumSongsState[album.id];
+  var st = artistSongCache[album.id];
   if (!st || st === 'loading') return '';
   var songs = (st && st.songs) || [];
   if (!songs.length) return '';
   return '<div class="sec-head" style="padding:14px 16px 4px"><h3 style="font-size:15px">Songs by ' + esc(album.artist) + '</h3></div>' +
     '<div class="rows">' + songs.map(trackRow).join('') + '</div>';
 }
-var albumSongsState = {};   // albumId -> 'loading' | 'loaded' | {songs:[...]}
 
 async function loadAlbumArtistSongs(albumId){
   var a = state.activeAlbumObj;
   if (!a || a.id !== albumId) return;
-  if (albumSongsState[albumId] !== undefined) return;
-  albumSongsState[albumId] = 'loading';
+  if (artistSongCache[albumId] !== undefined) return;
+  artistSongCache[albumId] = 'loading';
   try {
     var res = await Backend.searchSongs(a.artist);
     var songs = (res.tracks || []).filter(function(t){
@@ -3739,18 +2123,14 @@ async function loadAlbumArtistSongs(albumId){
       return art.indexOf(String(a.artist || '').toLowerCase()) >= 0 || art.indexOf(String(a.artist || '').toLowerCase().split(' ')[0]) >= 0;
     });
     if (!songs.length) songs = res.tracks || [];
-    albumSongsState[albumId] = { songs: songs.slice(0, 20) };
+    artistSongCache[albumId] = { songs: songs.slice(0, 20) };
     if (state.view === 'album' && state.activeAlbumObj && state.activeAlbumObj.id === albumId) render();
   } catch (e) {
-    albumSongsState[albumId] = { songs: [] };
+    artistSongCache[albumId] = { songs: [] };
   }
 }
 
 /* ------------------------------ PWA layer ------------------------------ */
-var ICON_192 = 'data:image/png;base64,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';
-var ICON_512 = 'data:image/png;base64,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';
-var ICON_MASK = 'data:image/png;base64,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';
-
 function isStandaloneMode(){
   try {
     return window.matchMedia('(display-mode: standalone)').matches ||
@@ -3764,7 +2144,7 @@ function manifestObject(){
     id: location.pathname || '/',
     name: 'Sonora',
     short_name: 'Sonora',
-    description: 'A YouTube Music client — clean audio, single file.',
+    description: 'A YouTube Music client — official player, single file.',
     start_url: location.pathname + location.search,
     scope: location.pathname.replace(/[^/]*$/, ''),
     display: 'standalone',
@@ -3793,8 +2173,6 @@ async function initPWA(){
     });
   } catch(e){}
 
-  /* The <link> already points at manifest.webmanifest. If that file isn't there
-     (opened as a lone file, or hosted without it), build one at runtime instead. */
   var link = document.getElementById('manifest-link');
   var haveExternal = false;
   if (location.protocol === 'http:' || location.protocol === 'https:'){
@@ -3806,7 +2184,7 @@ async function initPWA(){
       haveExternal = mr.ok;
     } catch(e){ haveExternal = false; }
   }
-  if (!haveExternal){
+  if (!haveExternal && link){
     try {
       var blob = new Blob([JSON.stringify(manifestObject())], { type:'application/manifest+json' });
       link.href = URL.createObjectURL(blob);
@@ -3833,49 +2211,28 @@ function paintStaticIcons(){
   set('#shufBtn', ICONS.shuffle);
   set('#repBtn', ICONS.repeat);
   set('#npToggleBtn', ICONS.play);
-  set('#npLike', ICONS.heart);
-  set('#npDl', ICONS.download);
   set('#miniToggle', ICONS.play);
   set('#npLyricsBtn', ICONS.lyrics);
 }
 
 async function boot(){
-  gdriveLoadClientId();
-  gdriveLoadFileId();
   state.settings = Object.assign({}, state.settings, LS.get('sonora.settings', {}));
-  delete state.settings.apiKey;  /* YouTube Data API key no longer exists */
-  state.recent = LS.get('sonora.recent', []);
+  delete state.settings.engine;
+  delete state.settings.streamQuality;
+  delete state.settings.downloadQuality;
+  delete state.settings.downloadMode;
+  delete state.settings.capMB;
+  delete state.settings.apiKey;
+  state.recent = LS.get('sonora.recent', []).filter(function(id){ return typeof id === 'string'; });
   state.installDismissed = LS.get('sonora.installDismissed', false);
-
-  db = await openDB();
-  state.playlists = (await dbAll('playlists')).sort(function(a,b){ return (a.createdAt || 0) - (b.createdAt || 0); });
-  state.albums = await dbAll('albums');
-  state.liked = await dbAll('liked');
-  state.downloads = await dbAll('downloads');
-
-  /* re-register tracks referenced by saved library so they resolve offline */
-  state.downloads.forEach(function(d){
-    if (!TRACK_MAP[d.id]) TRACK_MAP[d.id] = { id:d.id, title:d.title, artist:d.artist, thumb:d.thumb, dur:0, source:'saved' };
-  });
 
   paintStaticIcons();
   state.ready = true;
   render();
   await initPWA();
   render();
-  Backend.probe().then(function(){ render(); });
-
-  if (navigator.onLine === false) state.net = 'down';
-  window.addEventListener('online', function(){ Backend.working = null; probeAndRender(); });
-  window.addEventListener('offline', function(){ state.net = 'down'; render(); });
-
 }
 
-document.addEventListener('gesturestart', function(e){ e.preventDefault(); });
-document.addEventListener('gesturechange', function(e){ e.preventDefault(); });
-document.addEventListener('gestureend', function(e){ e.preventDefault(); });
-
-boot();
-</script>
-</body>
-</html>
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+</script>\n</body>\n</html>
