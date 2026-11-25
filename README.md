@@ -4,10 +4,7 @@ Static site, no build step. Push it and GitHub Pages serves it.
 
 ```
 /                     → project index (landing page)
-/music/               → Sonora, the YouTube Music client (installable web app)
-/music/sw.js          → service worker (offline launch; scope must stay /music/)
-/music/manifest.webmanifest
-/music/icons/         → app icons (180 / 192 / 512 / maskable)
+/music/               → Sonora, the YouTube Music client (official player only)
 /google-ping/         → Google Ping connectivity tool
 /lineforge/           → LineForge, the opening-line trainer (self-contained: index.html, app.js, styles.css, assets/, vendor/)
 /404.html             → custom not-found page
@@ -24,8 +21,10 @@ Static site, no build step. Push it and GitHub Pages serves it.
 
 ## Rules that matter
 
-- **Don't move or rename `/music/sw.js` or `/music/icons/`.** The service worker's scope is
-  `/music/`; if the file lives elsewhere it silently stops working, and the manifest icons 404.
+- **Sonora is a plain web page, not an installable app.** There is deliberately no service
+  worker, manifest or icon set: no Add-to-Home-Screen, no offline cache. On phones it fills
+  the screen edge to edge and asks for browser fullscreen on first tap. Don't reintroduce
+  `sw.js`/`manifest.webmanifest` without also re-adding the install UI.
 - `.nojekyll` must stay at the repo root, or GitHub Pages will hide files starting with `_`.
 - No secrets in this repo. Sonora needs no API key; a user who wants an optional fallback key
   pastes it into the app's own Settings, where it's stored in their browser only. LineForge
