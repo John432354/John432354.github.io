@@ -3,23 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="mobile-web-app-capable" content="yes">
 <meta name="format-detection" content="telephone=no">
 <title>Sonora</title>
 <meta name="description" content="Sonora — a single-file music player.">
 
-<!-- ============ iOS Add to Home Screen / standalone app ============ -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="Sonora">
-<meta name="application-name" content="Sonora">
 <meta name="theme-color" content="#0b0906">
-<link rel="apple-touch-icon" sizes="180x180" href="data:image/png;base64,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">
 <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAYFBMVEUSEhIduFMdw1gRCA4ZlkUVaDIVdzgYjEIJBAYTVisSDRAao0oVOSEZhD8crlAKEQwUMh4UYi8MIhQONRwSTycAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACdHmGDAAAA4klEQVR42r2TfxODIAiGhUREa7W27/9ZB17rd2f/bNx1FT68gKJz/7Vmsqtl11LnfUetO0NSEg9YDLykdAxnBCiEvXgv0gwPBA0NREGFAB/DhkjO1lmCz9kHYSPcOksyVyAwfX0oGL4CGrF1LumhlGCErJJoWiaEwBOCpF9+EWjVJ+qWKDAh+gvtV6Ihq19FKcYxFAKtF5qBDtWhwDP2Mb6yVaoB2M2AlkcZDDDrTT4TIl8AqrEHNilGPqZYFdlT6WNX5NLmO5+1Wd2oG1tdO6z6cVcHpj5y9aGtj/2Ni/Mr+wAIYAk8Kcjo4AAAAABJRU5ErkJggg==">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%230b0906'/%3E%3Cg fill='%23e0a63f'%3E%3Crect x='3' y='10' width='2.2' height='4'/%3E%3Crect x='7' y='5' width='2.2' height='14'/%3E%3Crect x='11' y='8' width='2.2' height='8'/%3E%3Crect x='15' y='3' width='2.2' height='18'/%3E%3Crect x='19' y='11' width='2.2' height='2'/%3E%3C/g%3E%3C/svg%3E">
 <link rel="shortcut icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%230b0906'/%3E%3Cg fill='%23e0a63f'%3E%3Crect x='3' y='10' width='2.2' height='4'/%3E%3Crect x='7' y='5' width='2.2' height='14'/%3E%3Crect x='11' y='8' width='2.2' height='8'/%3E%3Crect x='15' y='3' width='2.2' height='18'/%3E%3Crect x='19' y='11' width='2.2' height='2'/%3E%3C/g%3E%3C/svg%3E">
-<link id="manifest-link" rel="manifest" href="manifest.webmanifest">
 
 <style>
 
@@ -68,8 +59,33 @@
   input{font:inherit;color:inherit}
   ::-webkit-scrollbar{width:0;height:0}
 
+  /* ---------- mobile fullscreen shell ---------- */
+  /* No install/PWA any more — the page itself fills the phone screen:
+     edge to edge, safe-area aware, its own scroll container. Keeps the
+     browser's own fullscreen when the browser grants it, and still looks
+     like an app when it doesn't (iOS Safari has no Element.fullscreen). */
+  body.mobile{
+    background:var(--app);
+    overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;
+  }
+  body.mobile #app{
+    max-width:none;
+    height:100dvh;
+    height:calc(var(--vh) * 100);
+    border-left:0;border-right:0;
+  }
+  /* while the browser has real fullscreen, drop every bit of chrome */
+  #app:fullscreen,
+  html:fullscreen #app{
+    max-width:none;width:100%;height:100%;
+    border:0;box-shadow:none;
+  }
+  html:fullscreen body,
+  html:-webkit-full-screen body{background:var(--app)}
+
   /* ---------- app frame ---------- */
-  :root{ --side:248px; --maxw:460px; --contentw:980px }
+  :root{ --side:248px; --maxw:460px; --contentw:980px; --vh:1vh }
   #app{
     position:relative;
     width:100%;max-width:var(--maxw);
@@ -85,12 +101,15 @@
     border-left:1px solid #0a0806;
     border-right:1px solid #0a0806;
   }
-  /* app shell: sidebar on desktop, bottom tab bar on mobile */
-  #app{ flex-direction:row; }
+  /* app shell: sidebar on desktop, bottom tab bar on mobile.
+     On phones this MUST stay a column: #content stacked above #sidebar.
+     A row here turns the bottom tab bar into a narrow right-hand column
+     (the bug where the app was 269px wide with a 119px tab stub). */
+  #app{ flex-direction:column; }
   #content{ flex:1 1 auto; min-height:0; min-width:0; display:flex; flex-direction:column; }
   #sidebar{
     display:flex; flex-direction:row; align-items:stretch;
-    order:3; margin-top:auto;
+    order:3; margin-top:auto; width:100%;
     background:linear-gradient(180deg, #171310 0%, #100d09 100%);
     border-top:1px solid #060503;box-shadow:0 -1px 0 rgba(255,236,205,.05);
     padding-bottom:var(--safe-b);
@@ -112,10 +131,6 @@
       box-shadow:0 40px 90px rgba(0,0,0,.75), 0 0 0 1px rgba(255,236,205,.06);
     }
   }
-  @media (display-mode:standalone){
-    @media (min-width:600px){ body{padding:0} #app{height:100dvh;border:0;box-shadow:none} }
-  }
-
   @media (min-width:1024px){
     :root{ --side:248px; }
     body{ display:flex; align-items:stretch; justify-content:center; padding:0; }
@@ -394,6 +409,9 @@
   #mini .prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,#e0a63f,#f5c468)}
   #mini .mbtn{width:36px;height:36px;display:grid;place-items:center;flex:0 0 auto;color:#f8eacd;border:1px solid rgba(224,166,63,.4);background:linear-gradient(180deg,#4a3a20,#332a1a);box-shadow:var(--bevel)}
   #mini .mbtn svg{width:20px;height:20px}
+  #mini .mskip{width:30px;height:36px;border-color:rgba(224,166,63,.18);background:transparent;box-shadow:none;color:#cbbc9a}
+  #mini .mskip svg{width:17px;height:17px}
+  #mini .mskip:active{color:var(--accent);transform:translateY(1px)}
 
   #tabbar{
     flex:1 1 auto;
@@ -489,22 +507,6 @@
     opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;
   }
   #toast.show{opacity:1;transform:translate(-50%,0)}
-
-  /* install hint card */
-  .install{
-    display:flex;gap:12px;align-items:flex-start;
-    margin:0 16px 10px;padding:14px;
-    background:linear-gradient(180deg, #3a2e1a, #241e12);
-    border:1px solid #5a4423;box-shadow:var(--bevel);
-  }
-  .install .i{color:var(--accent);flex:0 0 auto;margin-top:1px}
-  .install .i svg{width:24px;height:24px}
-  .install .txt{flex:1;font-size:12.5px;line-height:1.5;color:#e3d6b8}
-  .install .txt b{color:#f8edd6;display:block;font-size:13.5px;margin-bottom:3px;font-family:var(--font)}
-  .install .x{color:var(--muted);font-size:12px;font-weight:800;padding:2px 5px}
-  .install .go{margin-top:10px;display:inline-flex;align-items:center;gap:6px;background:linear-gradient(180deg,#f0bc58,#c98a2c);color:#241503;
-    font-size:12px;font-weight:800;padding:9px 15px;border:1px solid #7a4e16;box-shadow:var(--bevel)}
-  .install .go:active{transform:translateY(1px)}
 
   /* ---------- lyrics panel + misc ---------- */
   .lyrics{
@@ -640,7 +642,9 @@
         <div class="s" id="miniArtist">—</div>
         <div class="prog"><i id="miniProg"></i></div>
       </div>
+      <button class="mbtn mskip" id="miniPrev" aria-label="Previous song"></button>
       <button class="mbtn" id="miniToggle" aria-label="Play or pause"></button>
+      <button class="mbtn mskip" id="miniNext" aria-label="Next song"></button>
     </div>
   </div>
   </div>
@@ -690,8 +694,8 @@ var ICONS = {
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" /> <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></svg>',
   play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z" /></svg>',
   pause:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" /> <path d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z" /></svg>',
-  next:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5v14a1 1 0 0 0 1.504 .864l12 -7a1 1 0 0 0 0 -1.728l-12 -7a1 1 0 0 0 -1.504 .864z" /> <path d="M20 4a1 1 0 0 1 .993 .883l.007 .117v14a1 1 0 0 1 -1.993 .117l-.007 -.117v-14a1 1 0 0 1 1 -1z" /></svg>',
-  prev:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.496 4.136l-12 7a1 1 0 0 0 0 1.728l12 7a1 1 0 0 0 1.504 -.864v-14a1 1 0 0 0 -1.504 -.864z" /> <path d="M4 4a1 1 0 0 1 .993 .883l.007 .117v14a1 1 0 0 1 -1.993 .117l-.007 -.117v-14a1 1 0 0 1 1 -1z" /></svg>',
+  next:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 5v14a1 1 0 0 0 1.504 .864l12 -7a1 1 0 0 0 0 -1.728l-12 -7a1 1 0 0 0 -1.504 .864z" /> <path d="M20 4a1 1 0 0 1 .993 .883l.007 .117v14a1 1 0 0 1 -1.993 .117l-.007 -.117v-14a1 1 0 0 1 1 -1z" /></svg>',
+  prev:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 5v14a1 1 0 0 1 -1.504 .864l-12 -7a1 1 0 0 1 0 -1.728l12 -7a1 1 0 0 1 1.504 .864z" /> <path d="M4 4a1 1 0 0 1 .993 .883l.007 .117v14a1 1 0 0 1 -1.993 .117l-.007 -.117v-14a1 1 0 0 1 1 -1z" /></svg>',
   shuffle:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 4l3 3l-3 3" /> <path d="M18 20l3 -3l-3 -3" /> <path d="M3 7h3a5 5 0 0 1 5 5a5 5 0 0 0 5 5h5" /> <path d="M21 7h-5a4.978 4.978 0 0 0 -3 1m-4 8a4.984 4.984 0 0 1 -3 1h-3" /></svg>',
   repeat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v-3a3 3 0 0 1 3 -3h13m-3 -3l3 3l-3 3" /> <path d="M20 12v3a3 3 0 0 1 -3 3h-13m3 3l-3 -3l3 -3" /></svg>',
   back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6l6 6" /></svg>',
@@ -703,7 +707,6 @@ var ICONS = {
   downloaded:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.707 6.293a1 1 0 0 1 0 1.414l-10 10a1 1 0 0 1 -1.414 0l-5 -5a1 1 0 0 1 1.414 -1.414l4.293 4.293l9.293 -9.293a1 1 0 0 1 1.414 0" /></svg>',
   dots:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /> <path d="M11 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /> <path d="M11 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>',
   share:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6" /> <path d="M11 13l9 -9" /> <path d="M15 4h5v5" /></svg>',
-  install:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 21h-4.5a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v7" /> <path d="M11 4h2" /> <path d="M12 17v.01" /> <path d="M19 16v6" /> <path d="M22 19l-3 3l-3 -3" /></svg>',
   trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0" /> <path d="M10 11l0 6" /> <path d="M14 11l0 6" /> <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /> <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>',
   edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /> <path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415" /> <path d="M16 5l3 3" /></svg>',
   x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6l-12 12" /> <path d="M6 6l12 12" /></svg>',
@@ -856,13 +859,11 @@ var state = {
   settings:{ strictness:'balanced', instance:'' },
   queue:[], idx:-1, playing:false, progress:0, shuffle:false, repeat:false,
   net:'unknown', recent:[], activeAlbumObj:null,
-  installDismissed:false, canInstall:false, ready:false
+  ready:false
 };
 
 var TRACK_MAP = {};
-var deferredPrompt = null;
 var ticker = null;
-var standalone = false;
 var searchSeq = 0, searchTimer = null, searchDirty = false;
 var artistSongCache = {};     // artist-lower -> { songs: [...], at }
 var ARTIST_CACHE_TTL = 10 * 60 * 1000;
@@ -1290,6 +1291,7 @@ function step(dir){
   syncPlayer();
 }
 
+var tickerTicks = 0;
 function startTicker(){
   clearInterval(ticker);
   ticker = setInterval(function(){
@@ -1298,6 +1300,9 @@ function startTicker(){
     var pos = Player.position();
     if (pos !== null && !isNaN(pos)) state.progress = pos;
     else state.progress += 0.5;
+    /* the YouTube iframe can install its own Media Session (with +-10s) —
+       re-apply ours every ~2s so the song buttons stay song buttons */
+    if (tickerTicks++ % 4 === 0) sessionHandlers();
     paintProgress();
   }, 500);
 }
@@ -1334,7 +1339,7 @@ function syncPlayer(){
     $('#npArtist').textContent = t.artist;
     $('#npDur').textContent = fmt(t.dur);
     $('#npToggleBtn').innerHTML = state.playing ? ICONS.pause : ICONS.play;
-    $('#npQual').textContent = 'OFFICIAL PLAYER';
+    $('#npQual').textContent = 'OFFICIAL PLAYER · SKIP = WHOLE SONG';
     $('#shufBtn').classList.toggle('on', state.shuffle);
     $('#repBtn').classList.toggle('on', state.repeat);
     var lyrBtn = $('#npLyricsBtn');
@@ -1350,6 +1355,22 @@ function syncPlayer(){
   }
 }
 
+function sessionHandlers(){
+  /* Lock screen / Control Center: whole-song skips only.
+     nexttrack + previoustrack are the song buttons; the -10s/+10s seek
+     handlers are unregistered so iOS can't offer step buttons instead. */
+  if (!('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.setActionHandler('play', function(){ togglePlay(); });
+    navigator.mediaSession.setActionHandler('pause', function(){ togglePlay(); });
+    navigator.mediaSession.setActionHandler('nexttrack', function(){ step(1); });
+    navigator.mediaSession.setActionHandler('previoustrack', function(){ step(-1); });
+  } catch(e){}
+  ['seekbackward', 'seekforward', 'seekto'].forEach(function(a){
+    try { navigator.mediaSession.setActionHandler(a, null); } catch(e){}
+  });
+}
+
 function setSessionMeta(){
   if (!('mediaSession' in navigator) || !window.MediaMetadata) return;
   var t = currentTrack(); if (!t) return;
@@ -1357,12 +1378,7 @@ function setSessionMeta(){
     navigator.mediaSession.metadata = new MediaMetadata({
       title: t.title, artist: t.artist, album: t.album || 'Sonora'
     });
-    navigator.mediaSession.setActionHandler('play', function(){ togglePlay(); });
-    navigator.mediaSession.setActionHandler('pause', function(){ togglePlay(); });
-    navigator.mediaSession.setActionHandler('nexttrack', function(){ step(1); });
-    navigator.mediaSession.setActionHandler('previoustrack', function(){ step(-1); });
-    navigator.mediaSession.setActionHandler('seekbackward', null);
-    navigator.mediaSession.setActionHandler('seekforward', null);
+    sessionHandlers();
     navigator.mediaSession.playbackState = state.playing ? 'playing' : 'paused';
   } catch(e){}
   syncSessionPosition();
@@ -1537,28 +1553,6 @@ function albumCard(a){
     '<div class="s">' + esc(a.artist || '') + '</div></button>';
 }
 
-function isIOS(){
-  var ua = navigator.userAgent;
-  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-function installHintHTML(){
-  if (standalone || state.installDismissed) return '';
-  if (isIOS()){
-    return '<div class="install"><div class="i">' + ICONS.install + '</div>' +
-      '<div class="txt"><b>Add Sonora to your Home Screen</b>Tap <b style="display:inline">Share</b> in Safari, then ' +
-      '<b style="display:inline">Add to Home Screen</b>. It then runs full-screen with its own icon.</div>' +
-      '<button class="x" data-act="dismiss-install" aria-label="Dismiss">✕</button></div>';
-  }
-  if (state.canInstall){
-    return '<div class="install"><div class="i">' + ICONS.install + '</div>' +
-      '<div class="txt"><b>Install Sonora</b>Add it to your device as an app — opens without the browser bar.</div>' +
-      '<button class="go" data-act="install-app">Install</button></div>';
-  }
-  return '<div class="install"><div class="i">' + ICONS.install + '</div>' +
-    '<div class="txt"><b>Make it an app</b>On a phone, use your browser’s <b style="display:inline">Add to Home Screen</b> to install it.</div>' +
-    '<button class="x" data-act="dismiss-install" aria-label="Dismiss">✕</button></div>';
-}
-
 /* ---------- views ---------- */
 function viewHome(){
   var hour = new Date().getHours();
@@ -1571,8 +1565,6 @@ function viewHome(){
   html += '<button class="quick" data-act="go-search"><div class="art" style="background:linear-gradient(140deg,#4e4376,#2b5876)"></div><span>Find music</span></button>';
   html += '<a class="quick" href="https://music.youtube.com/" target="_blank" rel="noopener"><div class="art" style="background:linear-gradient(140deg,#7a2020,#311111)"></div><span>Music on YouTube ↗</span></a>';
   html += '</div></div>';
-
-  html += installHintHTML();
 
   html += '<section class="sec"><div class="sec-head"><h3>Recently played</h3></div><div class="rows">' +
     (recents.length ? recents.map(trackRow).join('')
@@ -1723,8 +1715,6 @@ function viewSettings(){
     }).join('') + '</div>';
   }
   var html = '<div class="viewfade">';
-  html += installHintHTML();
-
   html += '<div class="setsec"><h3>Search</h3><div class="card-box">' +
     '<div class="setrow"><div><div class="lbl">Status</div>' +
     '<div class="sub">' + (state.net === 'online'
@@ -1751,9 +1741,6 @@ function viewSettings(){
     '<span style="font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--accent)">YOUTUBE</span></div></div></div>';
 
   html += '<div class="setsec"><h3>App</h3><div class="card-box">' +
-    '<div class="setrow"><div><div class="lbl">Installed as app</div>' +
-    '<div class="sub">' + (standalone ? 'Running standalone — no browser UI.' : 'Safari → Share → Add to Home Screen.') + '</div></div>' +
-    '<span style="font-size:11px;font-weight:800;letter-spacing:.06em;color:' + (standalone ? 'var(--accent)' : 'var(--muted)') + '">' + (standalone ? 'YES' : 'NO') + '</span></div>' +
     '<div class="setrow"><div><div class="lbl">Recently played</div>' +
     '<div class="sub">' + state.recent.length + ' track(s) stored on this device.</div></div>' +
     '<button class="chip" data-act="clear-history">Clear</button></div>' +
@@ -1763,7 +1750,6 @@ function viewSettings(){
     'Sonora — a single-file YouTube Music client. Search uses public Invidious instances; playback uses the official YouTube player. No account, no ads, no tracking, nothing else. ' +
     '<span style="color:var(--muted2)">Lyrics, when opened, are fetched from public lyrics services for the current track.</span></div></div></div>';
 
-  html += '<div class="note" style="margin-bottom:26px"><b>If you delete the Home Screen icon</b>, iOS also deletes everything Sonora stored on the device.</div>';
   html += '</div>';
   return html;
 }
@@ -1808,9 +1794,6 @@ function openHiddenInfo(){
   html += '<button class="aitem" data-act="close-sheet" style="justify-content:center;color:var(--accent)">Close</button>';
   openSheet(html);
 }
-var ICON_192 = 'data:image/png;base64,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';
-var ICON_512 = 'data:image/png;base64,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';
-var ICON_MASK = 'data:image/png;base64,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';/* ------------------------------ events ------------------------------ */
 document.addEventListener('click', function(e){
   if (e.target.closest && e.target.closest('#searchResults')) searchDirty = false;
   var el = e.target.closest('[data-act]');
@@ -1891,8 +1874,6 @@ document.addEventListener('click', function(e){
       syncPlayer();
       break;
     }
-    case 'install-app': if (deferredPrompt){ deferredPrompt.prompt(); deferredPrompt = null; state.canInstall = false; } break;
-    case 'dismiss-install': state.installDismissed = true; LS.set('sonora.installDismissed', true); render(); break;
   }
 });
 
@@ -1929,6 +1910,8 @@ $('#mini').addEventListener('click', function(e){
   $('#np').classList.add('open'); syncPlayer();
 });
 $('#miniToggle').addEventListener('click', function(e){ e.stopPropagation(); togglePlay(); });
+$('#miniPrev').addEventListener('click', function(e){ e.stopPropagation(); step(-1); });
+$('#miniNext').addEventListener('click', function(e){ e.stopPropagation(); step(1); });
 $('#npVideoWrap').addEventListener('click', function(){
   var t = currentTrack();
   if (!t) return;
@@ -2130,75 +2113,71 @@ async function loadAlbumArtistSongs(albumId){
   }
 }
 
-/* ------------------------------ PWA layer ------------------------------ */
-function isStandaloneMode(){
+/* --------------------------- fullscreen (mobile) --------------------------- */
+/* There is no app install any more: no manifest, no service worker, no
+   Add-to-Home-Screen card. Instead the page itself goes edge to edge on a
+   phone and asks the browser for real fullscreen the first time you touch
+   anything (browsers require a user gesture). Desktop keeps window chrome. */
+var fsRequested = false;
+
+function isMobileUA(){
+  /* any one signal is enough: client hints, the UA string, or a touch Mac */
   try {
-    return window.matchMedia('(display-mode: standalone)').matches ||
-           window.matchMedia('(display-mode: fullscreen)').matches ||
-           navigator.standalone === true;
+    if (navigator.userAgentData && navigator.userAgentData.mobile === true) return true;
+  } catch(e){}
+  if (/Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent)) return true;
+  try {
+    if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+  } catch(e){}
+  return false;
+}
+
+function isFullscreen(){
+  try {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
   } catch(e){ return false; }
 }
 
-function manifestObject(){
-  return {
-    id: location.pathname || '/',
-    name: 'Sonora',
-    short_name: 'Sonora',
-    description: 'A YouTube Music client — official player, single file.',
-    start_url: location.pathname + location.search,
-    scope: location.pathname.replace(/[^/]*$/, ''),
-    display: 'standalone',
-    display_override: ['standalone', 'minimal-ui'],
-    orientation: 'portrait',
-    background_color: '#0b0906',
-    theme_color: '#0b0906',
-    lang: 'en',
-    categories: ['music', 'entertainment'],
-    icons: [
-      { src: ICON_192, sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: ICON_512, sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: ICON_MASK, sizes: '512x512', type: 'image/png', purpose: 'maskable' }
-    ]
-  };
+function syncViewportVars(){
+  /* iOS Safari's dynamic viewport: keep the shell glued to the visual viewport */
+  try {
+    var vv = window.visualViewport;
+    if (!vv) return;
+    document.documentElement.style.setProperty('--vh', (vv.height * 0.01) + 'px');
+  } catch(e){}
 }
 
-async function initPWA(){
-  standalone = isStandaloneMode();
-  if (standalone) document.body.classList.add('standalone');
+function requestFullscreenOnce(){
+  if (fsRequested || !isMobileUA() || isFullscreen()) return;
+  var el = document.documentElement;
+  var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if (!fn) return;                      /* iOS Safari: no Element.fullscreen — CSS handles it */
+  fsRequested = true;
   try {
-    window.matchMedia('(display-mode: standalone)').addEventListener('change', function(ev){
-      standalone = ev.matches;
-      document.body.classList.toggle('standalone', standalone);
-      render();
-    });
+    var r = fn.call(el, { navigationUI: 'hide' });
+    if (r && r.catch) r.catch(function(){ /* user or browser declined — stay in CSS fullscreen */ });
   } catch(e){}
+}
 
-  var link = document.getElementById('manifest-link');
-  var haveExternal = false;
-  if (location.protocol === 'http:' || location.protocol === 'https:'){
-    try {
-      var ctrl = new AbortController();
-      var tmo = setTimeout(function(){ ctrl.abort(); }, 4000);
-      var mr = await fetch('manifest.webmanifest', { cache:'no-store', signal: ctrl.signal });
-      clearTimeout(tmo);
-      haveExternal = mr.ok;
-    } catch(e){ haveExternal = false; }
+function initFullscreen(){
+  if (isMobileUA()) document.body.classList.add('mobile');
+  syncViewportVars();
+  window.addEventListener('resize', syncViewportVars);
+  if (window.visualViewport){
+    window.visualViewport.addEventListener('resize', syncViewportVars);
+    window.visualViewport.addEventListener('scroll', syncViewportVars);
   }
-  if (!haveExternal && link){
-    try {
-      var blob = new Blob([JSON.stringify(manifestObject())], { type:'application/manifest+json' });
-      link.href = URL.createObjectURL(blob);
-    } catch(e){}
-  }
-
-  if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')){
-    try { await navigator.serviceWorker.register('sw.js', { scope:'./' }); } catch(e){}
-  }
-
-  window.addEventListener('beforeinstallprompt', function(e){
-    e.preventDefault(); deferredPrompt = e; state.canInstall = true; render();
-  });
-  window.addEventListener('appinstalled', function(){ state.canInstall = false; toast('Installed — open Sonora from your home screen'); render(); });
+  var onFirstGesture = function(){
+    requestFullscreenOnce();
+    if (isFullscreen()) {
+      document.removeEventListener('pointerdown', onFirstGesture, true);
+      document.removeEventListener('touchend', onFirstGesture, true);
+    }
+  };
+  document.addEventListener('pointerdown', onFirstGesture, true);
+  document.addEventListener('touchend', onFirstGesture, true);
+  document.addEventListener('fullscreenchange', function(){ render(); });
+  document.addEventListener('webkitfullscreenchange', function(){ render(); });
 }
 
 /* ------------------------------ boot ------------------------------ */
@@ -2212,6 +2191,8 @@ function paintStaticIcons(){
   set('#repBtn', ICONS.repeat);
   set('#npToggleBtn', ICONS.play);
   set('#miniToggle', ICONS.play);
+  set('#miniPrev', ICONS.prev);
+  set('#miniNext', ICONS.next);
   set('#npLyricsBtn', ICONS.lyrics);
 }
 
@@ -2224,12 +2205,11 @@ async function boot(){
   delete state.settings.capMB;
   delete state.settings.apiKey;
   state.recent = LS.get('sonora.recent', []).filter(function(id){ return typeof id === 'string'; });
-  state.installDismissed = LS.get('sonora.installDismissed', false);
 
   paintStaticIcons();
   state.ready = true;
   render();
-  await initPWA();
+  initFullscreen();
   render();
 }
 
