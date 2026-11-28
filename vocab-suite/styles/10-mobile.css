@@ -1,0 +1,514 @@
+/* ============================================================================
+   Mobile / small-screen layer  (loaded last, so it can safely override)
+   ----------------------------------------------------------------------------
+   Additive on top of the upstream suite. Fixes:
+     1. HUD collapsing to three stacked rows and eating ~115px of a phone.
+     2. Creator Spec forced to 662px wide on a 390px screen — caused by
+        `.spec-hero-actions { min-width: 245px }` inside a non-wrapping flex
+        row, which inflated the whole card.
+     3. Wordle boards with many letters (e.g. 10-letter answers) and the
+        on-screen keyboard spilling past the right edge.
+     4. Long unbroken tokens (emails, URLs, code) pushing cards wider.
+   ========================================================================== */
+
+/* ---------- 1. HUD: one compact line ---------- */
+/* The header used to stack into three rows (~115px) on a phone. It is now a
+   single nowrap row: brand · Kev status · actions · depth. Everything that
+   can be inferred (nav pills duplicating the brand, the zone name duplicating
+   the depth colour) is hidden rather than wrapped. */
+@media (max-width: 780px) {
+  .hud-bar {
+    padding: 6px 10px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  /* Brand hugs its content so the middle group gets the slack */
+  .hud-left-group {
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 6px;
+  }
+
+  .hud-brand {
+    gap: 6px;
+    padding: 0;
+    min-width: 0;
+  }
+
+  .hud-brand-text {
+    min-width: 0;
+  }
+
+  .hud-brand-text strong {
+    font-size: 0.74rem;
+    letter-spacing: 0.05em;
+    display: block;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .hud-brand-text small {
+    font-size: 0.47rem;
+    letter-spacing: 0.08em;
+    display: block;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  /* Brand already says "VOCAB SUITE" — drop the duplicated nav pills */
+  .hud-nav-links {
+    display: none;
+  }
+
+  /* Actions take the middle: Kev pill ellipsises, icon buttons stay square */
+  .hud-actions {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    gap: 5px;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .hud-kev-pill {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    padding: 4px 8px;
+  }
+
+  .kev-pill-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .hud-btn {
+    flex: 0 0 auto;
+    padding: 4px 7px;
+    min-width: 0;
+  }
+
+  .hud-btn .hide-xs {
+    display: none;
+  }
+
+  /* Small icon buttons don't need the chunky min-width */
+  .hud-btn.icon-only {
+    min-width: 0;
+    width: 32px;
+    padding: 4px 0;
+    justify-content: center;
+  }
+
+  /* Depth stays, but the pill loses its chrome so it reads as a readout */
+  .hud-depth-cluster {
+    flex: 0 0 auto;
+    gap: 0;
+    padding: 0 0 0 2px;
+    border: 0;
+    background: none;
+  }
+
+  .hud-depth-readout {
+    gap: 4px;
+  }
+
+  .hud-depth-value {
+    font-size: 0.8rem;
+  }
+
+  /* The depth pill already shows the zone colour — hide the long zone name */
+  .hud-zone-pill {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .hud-brand-mark {
+    font-size: 1.05rem;
+  }
+
+  .hud-brand-text strong {
+    font-size: 0.68rem;
+  }
+
+  /* "KRILLION · WORDLE" is repeated in the hero copy — first thing to go */
+  .hud-brand-text small {
+    display: none;
+  }
+
+  /* Depth keeps its value, loses its label */
+  .hud-label {
+    display: none;
+  }
+
+  .hud-depth-value {
+    font-size: 0.78rem;
+  }
+
+  .hud-bar {
+    gap: 5px;
+    padding: 6px 8px;
+  }
+}
+
+/* ---------- 2. Creator Spec must never force horizontal scroll ---------- */
+@media (max-width: 900px) {
+  .spec-shell {
+    max-width: 100%;
+    margin: 10px 0 24px;
+    padding: 0 10px;
+    gap: 12px;
+  }
+
+  .spec-hero {
+    padding: 16px 14px;
+  }
+
+  .spec-hero-top {
+    gap: 12px;
+  }
+
+  /* This is the 662px culprit: a fixed min-width inside a flex row */
+  .spec-hero-actions {
+    min-width: 0;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .spec-hero-actions .btn {
+    flex: 1 1 160px;
+  }
+
+  .spec-card {
+    padding: 14px 13px;
+  }
+
+  .spec-hero h1 {
+    font-size: 1.25rem;
+  }
+
+  /* Code samples scroll inside their own box instead of widening the page */
+  .spec-pre {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 0.72rem;
+  }
+
+  .spec-pre code {
+    display: block;
+    min-width: max-content;
+  }
+}
+
+/* ---------- 3. Wordle: boards + keyboard stay inside the screen ---------- */
+@media (max-width: 680px) {
+  /* Scale every tile to the available width instead of a fixed clamp() */
+  .w-tile {
+    width: clamp(17px, calc((100vw - 120px) / var(--tile-count, 6)), 42px);
+    height: clamp(22px, calc((100vw - 120px) / var(--tile-count, 6) * 1.16), 46px);
+    font-size: clamp(0.62rem, calc((100vw - 120px) / var(--tile-count, 6) * 0.42), 1.05rem);
+  }
+
+  .wordle-board-row,
+  .board-row {
+    max-width: 100%;
+    gap: clamp(2px, 0.8vw, 5px);
+  }
+
+  .qwerty-rows {
+    max-width: 100%;
+    padding: 0 4px;
+  }
+
+  .qwerty-row {
+    gap: clamp(3px, 0.9vw, 7px);
+    padding: 0;
+  }
+
+  .qwerty-key {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 0;
+    font-size: clamp(0.62rem, 2.4vw, 0.9rem);
+  }
+
+  .qwerty-key.key-wide {
+    flex: 1.6 1 0;
+  }
+}
+
+/* ---------- 3b. Hero block: the title ate half a phone screen ---------- */
+/* 1.85rem of display type over three wrapped lines plus a 6-word eyebrow made
+   the first screen almost entirely chrome. On a phone the eyebrow collapses to
+   its one useful phrase, the h1 drops to a readable 1.4rem, and the lede is
+   trimmed to the sentence that explains the product. */
+@media (max-width: 620px) {
+  .lobby-hero {
+    padding: 18px 16px;
+    gap: 16px;
+  }
+
+  .hero-copy {
+    max-width: 100%;
+  }
+
+  .hero-copy h1 {
+    font-size: 1.4rem;
+    line-height: 1.25;
+    margin: 6px 0 6px;
+    letter-spacing: -0.015em;
+  }
+
+  .hero-copy p {
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  /* The badge is a marketing line, not information. Truncating it read as a
+     bug ("MODULAR … GITHUB.IO …"), so on a phone the h1 speaks for itself. */
+  .eyebrow-badge {
+    display: none;
+  }
+
+  .hero-spec-cta-row {
+    gap: 8px;
+  }
+
+  .hero-spec-cta-row .btn {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .stat-tile {
+    padding: 10px 11px;
+  }
+
+  .stat-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+  }
+
+  .stat-val {
+    font-size: 1.25rem;
+  }
+}
+
+/* ---------- 3c. Wordle board headers + action row ---------- */
+/* Two-line label + a two-line pill made every board ~40px taller than it
+   needed to be, so only one board was fully visible on a phone. */
+@media (max-width: 620px) {
+  .board-card-head {
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .board-card-head > span {
+    min-width: 0;
+    flex: 1 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .board-card-head small {
+    display: inline;      /* keep "13 letters · 0 tries" on the same line */
+    white-space: nowrap;
+  }
+
+  .focus-pill,
+  .solved-pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 0.64rem;
+    padding: 3px 8px;
+  }
+
+  /* Skip + Submit were wrapping to two lines each */
+  .wordle-action-bar {
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .typed-counter {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .wordle-action-btns {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .wordle-action-btns .btn {
+    white-space: nowrap;
+    font-size: 0.74rem;
+    padding: 9px 10px;
+  }
+}
+
+/* ---------- 3d. Modal tab strip ---------- */
+/* Three modal tabs wrapped to three lines each ("Export .zip / GitHub .js"),
+   which made the tab strip taller than the form under it. */
+@media (max-width: 620px) {
+  .modal-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .tab-btn {
+    min-width: 0;
+    padding: 9px 6px;
+    font-size: 0.72rem;
+    line-height: 1.2;
+  }
+
+  .modal-window {
+    padding: 16px 14px;
+    width: calc(100vw - 36px);
+    max-width: 100%;
+  }
+
+  .modal-window h2 {
+    font-size: 1.18rem;
+    line-height: 1.22;
+  }
+}
+
+/* ---------- 3e. Krillion warm-up / error state ---------- */
+/* When the Kev-0.6B model cannot be fetched (offline, blocked CDN, corporate
+   proxy) the raw fetch error — a 150-character CDN URL — was printed into a
+   banner with no wrapping, which pushed the card past the right edge and cut
+   off "Retry Load". The URL is still shown (it is the useful diagnostic) but it
+   now wraps and scrolls inside its own box. */
+@media (max-width: 780px) {
+  .warming-card {
+    padding: 22px 16px;
+  }
+
+  .warming-card h2 {
+    font-size: 1.3rem;
+    line-height: 1.25;
+  }
+
+  .warming-card p {
+    font-size: 0.85rem;
+    line-height: 1.45;
+  }
+
+  .kev-progress-meta {
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    font-size: 0.7rem;
+  }
+
+  .kev-progress-meta span,
+  .kev-progress-meta strong {
+    min-width: 0;
+    overflow-wrap: anywhere;   /* URLs must break here; they have no spaces */
+  }
+
+  .error-banner {
+    max-width: 100%;
+    min-width: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
+  .error-banner p {
+    word-break: break-word;
+  }
+
+  .error-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .error-actions .btn {
+    flex: 1 1 130px;
+  }
+}
+
+/* ---------- 4. Segmented option buttons: stop the 90px min-width squeeze ---------- */
+/* `.seg-btn { min-width: 90px }` was written for a desktop row of three. On a
+   phone it forces three 103px columns, so every label wraps to three or four
+   lines ("Confi/gure"). Below 620px the group becomes a two-column grid and
+   the button is allowed to size to its text. */
+@media (max-width: 620px) {
+  .segmented-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .segmented-group .seg-btn {
+    flex: initial;
+    min-width: 0;
+    padding: 9px 8px;
+    font-size: 0.78rem;
+    line-height: 1.25;
+    white-space: normal;
+  }
+
+  /* A group of exactly three looks lopsided in a 2-col grid; the third spans */
+  .segmented-group:not(.compact) .seg-btn:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  /* Rounds / timer groups are numeric: keep every option on one row */
+  .segmented-group.compact {
+    display: flex;
+    flex-wrap: nowrap;
+  }
+
+  .segmented-group.compact .seg-btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* Text buttons that were sized for a mouse pointer */
+  .btn {
+    min-height: 40px;
+    line-height: 1.2;
+  }
+
+  .btn-sm {
+    padding: 8px 11px;
+    font-size: 0.8rem;
+  }
+}
+
+/* ---------- 4. Never let a single long token widen a card ---------- */
+@media (max-width: 780px) {
+  .glass-card,
+  .lobby-panel,
+  .modal-window,
+  .subject-card {
+    min-width: 0;
+    max-width: 100%;
+    /* break-word only kicks in for a token that cannot fit on a line by
+       itself; `anywhere` would also split ordinary words like "Configure". */
+    overflow-wrap: break-word;
+  }
+
+  #app-root {
+    padding: 12px 10px 32px;
+    max-width: 100%;
+    min-width: 0;
+  }
+}
