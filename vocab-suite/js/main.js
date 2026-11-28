@@ -28,7 +28,7 @@ import { HudView } from './ui/hud-view.js';
 import { HomeLobbyView } from './ui/home-view.js';
 import { ActiveDiveView } from './ui/dive-view.js';
 import { DiveResultsView } from './ui/results-view.js';
-import { VocabWordleView } from './ui/wordle-view.js';
+import { VocabWordleView } from './ui/wordle-view.js?v=2.2';
 import { CreatorSpecView } from './ui/spec-view.js';
 import { SubjectModal } from './ui/subject-modal.js';
 import { AiSettingsModal } from './ui/ai-settings-modal.js';

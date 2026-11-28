@@ -3,6 +3,10 @@
  *
  * Defaults to `onnx-community/kev-0.6b-ONNX` — the smallest browser-ready
  * quantized Kev decision model (~330 MB q4f16 on WebGPU / ~365 MB q4 on WASM).
+ *
+ * IMPORTANT: Always use `dist/transformers.min.js` (the standalone self-contained
+ * browser bundle that embeds `onnxruntime-web` & WebGPU/WASM), NEVER
+ * `dist/transformers.web.min.js` (which leaves `onnxruntime-web/webgpu` external).
  */
 
 export const DEFAULT_KEV_MODEL_ID = 'onnx-community/kev-0.6b-ONNX';
@@ -47,4 +51,7 @@ export const KEV_FALLBACK_DELIMITER_IDS = {
 };
 
 export const TRANSFORMERS_CDN_URL =
-  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.web.min.js';
+  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js';
+
+export const TRANSFORMERS_FALLBACK_CDN_URL =
+  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';

@@ -5,7 +5,7 @@
  * main browser thread so the 60fps ocean canvas never drops a frame.
  */
 
-import { KevBrowserEngine } from './transformers-loader.js';
+import { KevBrowserEngine } from './transformers-loader.js?v=2.1';
 import { verifyAnswerThreePasses } from './pass-aggregator.js';
 
 const engine = new KevBrowserEngine();

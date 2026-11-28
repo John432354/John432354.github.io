@@ -1,12 +1,16 @@
 /**
  * Kev ONNX Runtime / Transformers.js Browser Engine
  *
- * Dynamically imports `@huggingface/transformers` from CDN ESM, downloads and
- * caches `onnx-community/kev-0.6b-ONNX` (smallest browser Kev, ~330 MB q4f16),
+ * Dynamically imports the self-contained `@huggingface/transformers` browser bundle
+ * (`dist/transformers.min.js`), downloads and caches `onnx-community/kev-0.6b-ONNX`,
  * and executes serialized prefill-only pointer-head forward passes.
  */
 
-import { DEFAULT_KEV_MODEL_ID, TRANSFORMERS_CDN_URL } from './models-config.js';
+import {
+  DEFAULT_KEV_MODEL_ID,
+  TRANSFORMERS_CDN_URL,
+  TRANSFORMERS_FALLBACK_CDN_URL,
+} from './models-config.js?v=2.1';
 import { resolveKevRuntime } from './device-detect.js';
 import { escapeKevUserText } from './text-escape.js';
 import { resolveDelimiterIds, packKevSequence } from './sequence-encoder.js';
@@ -17,7 +21,30 @@ let tfModulePromise = null;
 
 async function getTransformersModule() {
   if (!tfModulePromise) {
-    tfModulePromise = import(TRANSFORMERS_CDN_URL);
+    tfModulePromise = (async () => {
+      let mod;
+      try {
+        mod = await import(TRANSFORMERS_CDN_URL);
+      } catch {
+        mod = await import(TRANSFORMERS_FALLBACK_CDN_URL);
+      }
+      if (mod?.env) {
+        mod.env.allowLocalModels = false;
+        mod.env.useBrowserCache = true;
+        if (
+          mod.env.backends?.onnx?.wasm &&
+          typeof self !== 'undefined' &&
+          !self.crossOriginIsolated
+        ) {
+          mod.env.backends.onnx.wasm.numThreads = 1;
+        }
+      }
+      return mod;
+    })().catch((err) => {
+      // Reset cached promise on failure so Retry Load genuinely re-attempts import
+      tfModulePromise = null;
+      throw err;
+    });
   }
   return tfModulePromise;
 }
