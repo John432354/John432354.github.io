@@ -47,7 +47,7 @@ export class KevJudgeClient {
   ensureWorker() {
     if (this.worker || this.inlineEngine) return;
     try {
-      const workerUrl = new URL('./kev-worker.js', import.meta.url);
+      const workerUrl = new URL('./kev-worker.js?v=2.1', import.meta.url);
       this.worker = new Worker(workerUrl, { type: 'module' });
       this.worker.addEventListener('message', (e) => this.handleWorkerMessage(e.data));
       this.worker.addEventListener('error', (err) => {
@@ -114,7 +114,7 @@ export class KevJudgeClient {
   async callInlineFallback(type, payload, onPass) {
     if (!this.inlineEngine) {
       const [{ KevBrowserEngine }, { verifyAnswerThreePasses }] = await Promise.all([
-        import('./transformers-loader.js'),
+        import('./transformers-loader.js?v=2.1'),
         import('./pass-aggregator.js'),
       ]);
       this.inlineEngine = new KevBrowserEngine();

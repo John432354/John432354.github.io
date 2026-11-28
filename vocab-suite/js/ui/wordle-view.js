@@ -4,6 +4,7 @@
  * - Displays the Stored Definition clue + Subject/Unit/Topic breadcrumb.
  * - Renders simultaneous Wordle boards for every `-`-separated valid answer
  *   so players can work on multiple answers at once and win by finding ANY ONE.
+ * - Shows ALL past tries (`#1..#N`) + live row on screen at once (no hidden scroll clipping).
  * - Unlimited tries, zero AI correction, physical + on-screen QWERTY keyboard.
  * - Dynamic Skip Cooldown scaled to answer & explanation length, displaying
  *   all valid answers + optional `// Java comment` explanation at the end of every question.
@@ -40,7 +41,6 @@ export class VocabWordleView {
 
   handleWindowKeyDown(e) {
     if (!this.active) return;
-    // Ignore when a modal or text input is focused
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (!document.getElementById('modal-root')?.hidden) return;
@@ -68,7 +68,6 @@ export class VocabWordleView {
     const isEnded = phase === 'solved' || phase === 'skipped_cooldown' || phase === 'skipped_ready';
     const isCooldownLocked = phase === 'skipped_cooldown' && state.cooldownRemainingMs > 0;
 
-    // Aggregate keyboard colors from focused board (if chosen) or across all boards
     const keySourceGuesses =
       focusedBoardIndex !== null && boards[focusedBoardIndex]
         ? boards[focusedBoardIndex].guesses
@@ -136,7 +135,7 @@ export class VocabWordleView {
         <!-- End-of-Question Reveal Banner (Solved OR Skipped Cooldown) -->
         ${isEnded ? this.renderEndedRevealCard(state, isCooldownLocked) : ''}
 
-        <!-- Simultaneous Multi-Answer Wordle Boards -->
+        <!-- Simultaneous Multi-Answer Wordle Boards (all past tries shown in full at once) -->
         <div class="wordle-boards-grid boards-count-${Math.min(4, boards.length)}">
           ${boards
             .map((board) =>
@@ -207,11 +206,6 @@ export class VocabWordleView {
     `;
 
     this.bindEvents();
-
-    // Auto-scroll guess history containers to bottom so latest unlimited try is visible
-    this.container.querySelectorAll('.board-rows-scroll').forEach((el) => {
-      el.scrollTop = el.scrollHeight;
-    });
   }
 
   renderSingleBoard(board, { currentInput, focusedBoardIndex, phase, isMulti, isWinner }) {
@@ -245,9 +239,18 @@ export class VocabWordleView {
           }
         </div>
 
-        <div class="board-rows-scroll">
+        <div class="board-rows-stack">
           ${board.guesses
-            .map((g) => this.renderTileRow(board.length, g.letters, g.states, board.spaceBeforeIndices))
+            .map((g, tryIdx) =>
+              this.renderTileRow(
+                board.length,
+                g.letters,
+                g.states,
+                board.spaceBeforeIndices,
+                false,
+                `#${tryIdx + 1}`
+              )
+            )
             .join('')}
 
           ${
@@ -257,7 +260,8 @@ export class VocabWordleView {
                   receivesLiveInput ? currentInput : [],
                   null,
                   board.spaceBeforeIndices,
-                  true
+                  true,
+                  `#${board.guesses.length + 1}`
                 )
               : ''
           }
@@ -272,7 +276,14 @@ export class VocabWordleView {
     `;
   }
 
-  renderTileRow(length, letters = [], states = null, spaceBeforeSet = new Set(), isActiveInput = false) {
+  renderTileRow(
+    length,
+    letters = [],
+    states = null,
+    spaceBeforeSet = new Set(),
+    isActiveInput = false,
+    rowLabel = ''
+  ) {
     const tiles = [];
     for (let i = 0; i < length; i += 1) {
       if (spaceBeforeSet && spaceBeforeSet.has(i)) {
@@ -284,7 +295,12 @@ export class VocabWordleView {
         `<span class="w-tile ${stateClass} ${isActiveInput ? 'is-live' : ''}">${escapeHtml(ch)}</span>`
       );
     }
-    return `<div class="w-row" style="--tile-count:${length}">${tiles.join('')}</div>`;
+    return `
+      <div class="w-row ${isActiveInput ? 'w-row-active' : ''}" style="--tile-count:${length}">
+        <span class="w-try-num" aria-hidden="true">${escapeHtml(rowLabel)}</span>
+        <div class="w-tiles-line">${tiles.join('')}</div>
+      </div>
+    `;
   }
 
   renderEndedRevealCard(state, isCooldownLocked) {

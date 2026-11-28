@@ -208,11 +208,36 @@
 
 /* ---------- 3. Wordle: boards + keyboard stay inside the screen ---------- */
 @media (max-width: 680px) {
-  /* Scale every tile to the available width instead of a fixed clamp() */
+  /* Scale every tile to the available width instead of a fixed clamp().
+     v2.2 added a per-row "#N" gutter (28px + 8px gap) inside .w-row, so the
+     tile budget drops from 120px to 160px of reserved space: 2x10 card padding
+     + 2x4 stack padding + 28 gutter + 8 gap + 2px slack per side, leaving the
+     rest for the tiles and their 5px inter-tile gaps. */
   .w-tile {
-    width: clamp(17px, calc((100vw - 120px) / var(--tile-count, 6)), 42px);
-    height: clamp(22px, calc((100vw - 120px) / var(--tile-count, 6) * 1.16), 46px);
-    font-size: clamp(0.62rem, calc((100vw - 120px) / var(--tile-count, 6) * 0.42), 1.05rem);
+    width: clamp(15px, calc((100vw - 160px) / var(--tile-count, 6)), 42px);
+    height: clamp(20px, calc((100vw - 160px) / var(--tile-count, 6) * 1.16), 46px);
+    font-size: clamp(0.58rem, calc((100vw - 160px) / var(--tile-count, 6) * 0.42), 1.05rem);
+  }
+
+  /* The try-number gutter: v2.2 sizes it for a desktop row. Tighten it on a
+     phone and let a long guess history scroll horizontally instead of being
+     clipped, which is the behaviour v2.2 replaced the old scroll box with. */
+  .w-try-num {
+    flex: 0 0 22px;
+    font-size: 0.6rem;
+  }
+
+  .w-row {
+    gap: 6px;
+  }
+
+  .w-tiles-line {
+    gap: clamp(2px, 0.9vw, 5px);
+  }
+
+  .board-rows-stack {
+    padding: 5px 2px;
+    gap: 6px;
   }
 
   .wordle-board-row,
@@ -310,12 +335,14 @@
     align-items: center;
   }
 
+  /* The label may shrink, but "#N (13 letters · 0 tries)" is information the
+     player needs — wrapping is better than truncating it to "(13 letters · 0…". */
   .board-card-head > span {
     min-width: 0;
     flex: 1 1 auto;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
   }
 
   .board-card-head small {
@@ -327,8 +354,9 @@
   .solved-pill {
     flex: 0 0 auto;
     white-space: nowrap;
-    font-size: 0.64rem;
-    padding: 3px 8px;
+    font-size: 0.62rem;
+    padding: 3px 6px;
+    flex-shrink: 0;
   }
 
   /* Skip + Submit were wrapping to two lines each */
